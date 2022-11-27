@@ -58,7 +58,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Well done!
 
 ### 4. Additional Info
-*** Where are my saved runs?***
+***Where are my saved runs?***
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
 
