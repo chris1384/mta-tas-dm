@@ -293,13 +293,22 @@ function globalCommands(cmd, ...)
 				local file_name = "saves/"..args[1].."_"..tostring(math.random(1000,9999))..".txt"
 				local file = fileCreate("@"..file_name)
 				if file then
-					local whole_ass_data = {recording_data = global_data, details = {warps = {}, }}
+					--local whole_ass_data = {recording_data = global_data, details = {warps = {}, }} -- still to be worked on
 					fileWrite(file, toJSON(global_data))
 					fileClose(file)
 					outputChatBox("[TAS] #FFFFFFSaved file as #FFFF64"..file_name.."#ffffff!", 255, 255, 100, true)
 				end
 			end
 		end
+	elseif cmd == registered_commands.load_record then
+		if args[1] then
+			local file_name = "saves/"..tostring(args[1])..".txt"
+			local file = fileOpen("@"..file_name)
+			if file then
+			
+			end
+		end
+	end
 	-- debug
 	elseif cmd == registered_commands.debug then
 		if global.settings.showDebug then
@@ -395,49 +404,53 @@ end
 function renderPlaybacking()
 	-- why would i duplicate this render function just to make an another one for fbf? just make a mess out of this one already LOL
 	local vehicle = getPedOccupiedVehicle(localPlayer)
-	if vehicle then
-		if getVehicleController(vehicle) == localPlayer then
+	if vehicle and getVehicleController(vehicle) == localPlayer then
+		if global.fbf_switch == 1 then
+			removeEventHandler("onClientRender", root, renderPlaybacking)
+			-- this is an anomaly, the event below MIGHT trigger after the next~NEEEXT frame was rendered
+			-- i'm making sure it is working as it should
+			renderRecording()
+			addEventHandler("onClientRender", root, renderRecording)
+			return
+		end
 		
-			if global.fbf_switch == 1 then
-				removeEventHandler("onClientRender", root, renderPlaybacking)
-				-- this is an anomaly, the event below MIGHT trigger after the next~NEEEXT frame was rendered
-				-- i'm making sure it is working as it should
-				renderRecording()
-				addEventHandler("onClientRender", root, renderRecording)
-				return
+		local s = global.step
+		local data = global_data[s]
+		
+		setElementPosition(vehicle, unpack(data.p))
+		setElementRotation(vehicle, unpack(data.r))
+		setElementVelocity(vehicle, unpack(data.v))
+		setElementAngularVelocity(vehicle, unpack(data.rv))
+		if getElementModel(vehicle) ~= data.m then setElementModel(vehicle, data.m) end -- is it really doing it better or something?
+		setElementHealth(vehicle, data.h)
+		
+		if not data.n.a and data.n.r then
+			setVehicleNitroActivated(vehicle, false)
+		elseif data.n.a and not data.n.r then
+			if not isVehicleNitroActivated(vehicle) then 
+				setVehicleNitroActivated(vehicle, true) 
 			end
-			
-			local s = global.step
-			local data = global_data[s]
-			
-			setElementPosition(vehicle, unpack(data.p))
-			setElementRotation(vehicle, unpack(data.r))
-			setElementVelocity(vehicle, unpack(data.v))
-			setElementAngularVelocity(vehicle, unpack(data.rv))
-			if getElementModel(vehicle) ~= data.m then setElementModel(vehicle, data.m) end -- is it really doing it better or something?
-			setElementHealth(vehicle, data.h)
-			
-			if not data.n.a and data.n.r then
-				setVehicleNitroActivated(vehicle, false)
-			elseif data.n.a and not data.n.r then
-				if not isVehicleNitroActivated(vehicle) then 
-					setVehicleNitroActivated(vehicle, true) 
-				end
-			end
-			setVehicleNitroLevel(vehicle, data.n.l)
-			if not global.recording_fbf then
-				resetBinds()
-				for k,v in pairs(registered_keys) do
-					for _,h in ipairs(data.k) do
-						if k == h then
-							setPedControlState(localPlayer, v, true)
-						end
+		end
+		setVehicleNitroLevel(vehicle, data.n.l)
+		if not global.recording_fbf then
+			resetBinds()
+			for k,v in pairs(registered_keys) do
+				for _,h in ipairs(data.k) do
+					if k == h then
+						setPedControlState(localPlayer, v, true)
 					end
 				end
 			end
-			if global.recording_fbf and global.fbf_switch == 0 then return end
-			global.step = global.step + 1
-			if global.step > #global_data then global.step = #global_data end
+		end
+		if global.recording_fbf and global.fbf_switch == 0 then return end
+		global.step = global.step + 1
+		if global.step > #global_data then global.step = #global_data end
+	else
+		if global.playbacking then
+			global.playbacking = false
+			removeEventHandler("onClientRender", root, renderPlaybacking)
+			resetBinds()
+			outputChatBox("[TAS] #FFFFFFStopped playbacking due to an error!", 255, 100, 100, true)
 		end
 	end
 end
