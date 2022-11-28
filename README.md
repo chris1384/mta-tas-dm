@@ -1,6 +1,8 @@
 ## Recording & Seamless Segmenting Run Tool for MTA:SA
 ### by chris1384 @2020
 
+## THIS RESOURCE IS STILL A WORK IN PROGRESS, SOME FEATURES ARE NOT AVAILABLE YET
+
 This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstration purposes.
 Back in 2020, I've worked on a script that undos the whole run you've made if you did a mistake. I've always been dreaming about getting TAS scripts working with MTA:SA, but due to RenderWare random movement and calculations, the only way to make this sort of tool was to record every frame in real time, which manually adding inputs to a file was impossible.
 
