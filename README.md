@@ -43,8 +43,8 @@ Done!
 /rdw - delete latest warp
 /nf [frames] - set next frame while frame-by-frame recording
 /pf - delete the latest frame while frame-by-frame recording
-/resume - continue the recording if it stopped
-/seek [frame number] - resume the recording on a frame number
+/resume [frame number] - continue the recording (from a frame number)
+/seek [frame number] - seek to a frame while playbacking
 BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it up)
 /saver [name] - save the recorded data to a file
 /loadr [name] - load an existing run
