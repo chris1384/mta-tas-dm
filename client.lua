@@ -409,8 +409,9 @@ function globalCommands(cmd, ...)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.switch_record.." - switch between frame-by-frame and regular recording", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.next_frame.." [frames] | /"..registered_commands.previous_frame.." [frames] - next | previous frame recording", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.resume.." [frame] - continue recording (from frame number)", 255, 100, 100, true)
+		outputChatBox("[TAS] #FFFFFF/"..registered_commands.seek.." [frame] - seek to a frame number during playbacking", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.save_warp.." | /"..registered_commands.load_warp.." | /"..registered_commands.delete_warp.." - save | load | delete warp", 255, 100, 100, true)
-		outputChatBox("[TAS] #FFFFFFBACKSPACE - rewind during recording (+SHIFT to rewind faster)", 255, 100, 100, true)
+		outputChatBox("[TAS] #FFFFFFBACKSPACE - rewind during recording (+L-SHIFT fast rewind | +L-ALT slow rewind)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.load_record.." [file] | /"..registered_commands.save_record.." [file] - load | save record data", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.debug.." - toggle debugging", 255, 100, 100, true)
 	end
@@ -563,7 +564,7 @@ function renderDebug()
 	local pb_stat = "#FF6464FALSE"
 	if global.playbacking then 
 		pb_stat = "#64FF64TRUE" 
-		displayedFrames = {global.step-50, global.step+300} -- if you're playbacking, preview all frames instead of skipping some of them
+		displayedFrames = {global.step-50, global.step+200} -- if you're playbacking, preview all frames instead of skipping some of them
 		frameSkipping = 1 
 	end
 	
