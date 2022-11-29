@@ -7,6 +7,7 @@ local global = 	{
 						recording = false, -- do not change
 						playbacking = false, -- do not change
 						recording_fbf = false, -- do not change
+						recording_rewinding = false, -- do not change
 						
 						fbf_switch = 0, -- important
 						
@@ -177,10 +178,10 @@ function globalCommands(cmd, ...)
 			table_remove(global_data, last_step)
 			outputChatBox("[TAS] #FFFFFFFrame #"..tostring(last_step-1).."", 100, 255, 100, true)
 		end
-	-- record more switch
+	-- record switch
 	elseif cmd == registered_commands.switch_record then
 		if global.playbacking then
-			outputChatBox("[TAS] #FFFFFFRecording failed, stop playbacking first!", 255, 100, 100, true)
+			outputChatBox("[TAS] #FFFFFFSwitching failed, stop playbacking first!", 255, 100, 100, true)
 			return
 		end
 		if global.recording then
@@ -267,7 +268,7 @@ function globalCommands(cmd, ...)
 			setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
 			setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
 			setElementFrozen(vehicle, true)
-			if global.warp_timer then killTimer(global.warp_timer) global.warp_timer = nil end
+			if global.warp_timer then if isTimer(global.warp_timer) then killTimer(global.warp_timer) end global.warp_timer = nil end
 			global.warp_timer = setTimer(function()
 				setElementFrozen(vehicle, false)
 				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3]) -- doing it again just to make sure
@@ -286,6 +287,72 @@ function globalCommands(cmd, ...)
 		if #global_warps == 1 then outputChatBox("[TAS] #FFFFFFWarp #1 cannot be deleted!", 255, 100, 100, true) return end
 		table_remove(global_warps, #global_warps)
 		outputChatBox("[TAS] #FFFFFFWarp #ff3232#"..tostring(#global_warps).." #ffffffdeleted!", 255, 50, 50, true)
+	-- resuming
+	elseif cmd == registered_commands.resume then
+		local frame = #global_data
+		if args[1] and tonumber(args[1]) then -- wow tryna make fun of myself that's ugly
+			frame = tonumber(args[1])
+		end
+		if frame > #global_data or frame < 1 then outputChatBox("[TAS] #FFFFFFResuming run failed, you can't resume from that frame!", 255, 100, 100, true) return end
+		if vehicle then
+			if isPedDead(localPlayer) or getCameraTargetPlayer() ~= localPlayer then return end
+			if #global_data == 0 then outputChatBox("[TAS] #FFFFFFResuming run failed, no data found!", 255, 100, 100, true) return end
+			if global.playback then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop playbacking!", 255, 100, 100, true) return end
+			if global.recording or global.recording_fbf then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop recording first!", 255, 100, 100, true) return end
+			local recorded_cache = {}
+			for i=1, frame do
+				table_insert(recorded_cache, global_data[i])
+			end
+			global_data = recorded_cache
+			global.recording = true
+			local w_data = global_data[#global_data]
+			table_insert(global_warps, 	{
+								p = {w_data.p[1], w_data.p[2], w_data.p[3]},
+								r = {w_data.r[1], w_data.r[2], w_data.r[3]},
+								v = {w_data.v[1], w_data.v[2], w_data.v[3]},
+								rv = {w_data.rv[1], w_data.rv[2], w_data.rv[3]},
+								m = w_data.m,
+								h = w_data.h,
+								n = w_data.n.l,
+								s = #global_data
+							}
+						)
+			setElementModel(vehicle, w_data.m)
+			setElementHealth(vehicle, w_data.h)
+			setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
+			setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
+			setElementFrozen(vehicle, true)
+			if global.warp_timer then if isTimer(global.warp_timer) then killTimer(global.warp_timer) end global.warp_timer = nil end
+			global.warp_timer = setTimer(function()
+				setElementFrozen(vehicle, false)
+				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
+				setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
+				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
+				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
+				setVehicleNitroLevel(vehicle, w_data.n.l)
+				if global.recording then
+					renderRecording()
+					addEventHandler("onClientRender", root, renderRecording)
+				end
+			end, 500, 1)
+			outputChatBox("[TAS] #FFFFFFRun resumed from frame #64ff64#"..tostring(frame).." #ffffff! Recording frames..", 100, 255, 100, true)
+			outputChatBox("[TAS] #FFFFFFSaved warp as #3cb4ff#"..tostring(#global_warps).." #ffffff!", 60, 180, 255, true)
+		end
+	-- seeking
+	elseif cmd == registered_commands.seek then
+		local frame
+		if args[1] and tonumber(args[1]) then
+			frame = tonumber(args[1])
+		else
+			outputChatBox("[TAS] #FFFFFFSeeking failed, frame number is required!", 255, 100, 100, true)
+			return
+		end
+		if global.recording or global.recording_fbf then outputChatBox("[TAS] #FFFFFFSeeking failed, this can only be used while playbacking!", 255, 100, 100, true) return end
+		if frame < 1 or frame > #global_data then outputChatBox("[TAS] #FFFFFFSeeking failed, frame number does not exist!", 255, 100, 100, true) return end
+		if global.playbacking then
+			global.step = frame
+			outputChatBox("[TAS] #FFFFFFSeek to frame #6464FF#"..tostring(frame).."#ffffff!", 100, 100, 255, true)
+		end
 	-- save run
 	elseif cmd == registered_commands.save_record then
 		if args[1] then
@@ -300,15 +367,30 @@ function globalCommands(cmd, ...)
 				end
 			end
 		end
+	-- load record
 	elseif cmd == registered_commands.load_record then
 		if args[1] then
+			local success = false
 			local file_name = "saves/"..tostring(args[1])..".txt"
 			local file = fileOpen("@"..file_name)
 			if file then
-			
+				local size = fileGetSize(file)
+				local file_data = fileRead(file, size)
+				local convert = fromJSON(file_data)
+				if convert and type(convert) == "table" then
+					if convert[1].p and convert[1].r and convert[1].v and convert[1].rv then
+						global_data = convert
+						success = true
+					end
+				end
+				fileClose(file)
+			end
+			if success then
+				outputChatBox("[TAS] #FFFFFFLoaded file #FFFF64"..file_name.."#ffffff with #FFFF64#"..tostring(#global_data).."#ffffff frames, ready for use!", 255, 255, 100, true)
+			else
+				outputChatBox("[TAS] #FFFFFFLoading file failed, it does not exist or it has invalid data!", 255, 100, 100, true)
 			end
 		end
-	end
 	-- debug
 	elseif cmd == registered_commands.debug then
 		if global.settings.showDebug then
@@ -326,7 +408,7 @@ function globalCommands(cmd, ...)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.playback.." - start playbacking the recorded data", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.switch_record.." - switch between frame-by-frame and regular recording", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.next_frame.." [frames] | /"..registered_commands.previous_frame.." [frames] - next | previous frame recording", 255, 100, 100, true)
-		outputChatBox("[TAS] #FFFFFF/"..registered_commands.resume.." | /"..registered_commands.seek.." [frame] - continue recording | from frame number", 255, 100, 100, true)
+		outputChatBox("[TAS] #FFFFFF/"..registered_commands.resume.." [frame] - continue recording (from frame number)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.save_warp.." | /"..registered_commands.load_warp.." | /"..registered_commands.delete_warp.." - save | load | delete warp", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFFBACKSPACE - rewind during recording (+SHIFT to rewind faster)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.load_record.." [file] | /"..registered_commands.save_record.." [file] - load | save record data", 255, 100, 100, true)
@@ -464,6 +546,9 @@ end
 local keyboard_offset = 100
 
 function renderDebug()
+
+	local displayedFrames = {1, #global_data-1}
+
 	local rc_stat = "#FF6464FALSE"
 	if global.recording then rc_stat = "#64FF64TRUE" elseif global.recording_fbf then rc_stat = "#64FF64TRUE (Frame-By-Frame)" elseif global.userWarn_timer then rc_stat = "#FFFF64AWAITING STATUS.." end
 	
@@ -475,7 +560,7 @@ function renderDebug()
 	end
 	
 	local pb_stat = "#FF6464FALSE"
-	if global.playbacking then pb_stat = "#64FF64TRUE" end
+	if global.playbacking then pb_stat = "#64FF64TRUE" displayedFrames = {global.step-50, global.step+300} end
 	
 	_text("Recording: "..rc_stat.." "..fps_stat, screenW/2-keyboard_offset+170, screenH-200, 0, 0, 1, "default", "left", "top", false, false, false, true)
 	_text("Playbacking: "..pb_stat, screenW/2-keyboard_offset+170, screenH-200+18, 0, 0, 1, "default", "left", "top", false, false, false, true)
@@ -492,12 +577,15 @@ function renderDebug()
 	drawKey("ᐱ", screenW/2-keyboard_offset+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
 	drawKey("ᐯ", screenW/2-keyboard_offset+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
 	
-	for i=1,#global_data-1 do
-		local data = global_data[i]
-		if global_data[i].g == 1 then
-			dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(150,150,150,150), 3)
-		else
-			dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(255,0,0,150), 3)
+	for i=displayedFrames[1],displayedFrames[2] do
+		if global.playbacking then if i > #global_data-1 then return end end
+		local data
+		if global_data[i] then
+			if global_data[i].g == 1 then
+				dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(150,150,150,150), 3)
+			else
+				dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(255,0,0,150), 3)
+			end
 		end
 	end
 end
@@ -521,7 +609,7 @@ function _float(number)
 		if number % 1 == 0 then 
 			return number 
 		end
-		return (math_floor(number*1000))/1000
+		return (math_floor(number*10000))/10000 -- added another 0 for precision
 	end
 end
 
