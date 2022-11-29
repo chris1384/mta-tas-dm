@@ -1,3 +1,5 @@
+<a href='https://github.com/chris1384' target="_blank"><img alt='lua' src='https://img.shields.io/badge/mom_i made it in lua-100000?style=plastic&logo=lua&logoColor=white&labelColor=5C5C5C&color=5E56FF'/></a> ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/chris1384/mta-tas-dm)
+
 ## Recording & Seamless Segmenting Run Tool for MTA:SA
 ### by chris1384 @2020
 
