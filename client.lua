@@ -543,11 +543,12 @@ function resetBinds()
 	end
 end
 
-local keyboard_offset = 100
+local keyboard_offset = 100 -- lazy variable
 
 function renderDebug()
 
 	local displayedFrames = {1, #global_data-1}
+	local frameSkipping = 15
 
 	local rc_stat = "#FF6464FALSE"
 	if global.recording then rc_stat = "#64FF64TRUE" elseif global.recording_fbf then rc_stat = "#64FF64TRUE (Frame-By-Frame)" elseif global.userWarn_timer then rc_stat = "#FFFF64AWAITING STATUS.." end
@@ -560,7 +561,11 @@ function renderDebug()
 	end
 	
 	local pb_stat = "#FF6464FALSE"
-	if global.playbacking then pb_stat = "#64FF64TRUE" displayedFrames = {global.step-50, global.step+300} end
+	if global.playbacking then 
+		pb_stat = "#64FF64TRUE" 
+		displayedFrames = {global.step-50, global.step+300} -- if you're playbacking, preview all frames instead of skipping some of them
+		frameSkipping = 1 
+	end
 	
 	_text("Recording: "..rc_stat.." "..fps_stat, screenW/2-keyboard_offset+170, screenH-200, 0, 0, 1, "default", "left", "top", false, false, false, true)
 	_text("Playbacking: "..pb_stat, screenW/2-keyboard_offset+170, screenH-200+18, 0, 0, 1, "default", "left", "top", false, false, false, true)
@@ -577,15 +582,10 @@ function renderDebug()
 	drawKey("ᐱ", screenW/2-keyboard_offset+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
 	drawKey("ᐯ", screenW/2-keyboard_offset+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
 	
-	for i=displayedFrames[1],displayedFrames[2] do
-		if global.playbacking then if i > #global_data-1 then return end end
-		local data
-		if global_data[i] then
-			if global_data[i].g == 1 then
-				dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(150,150,150,150), 3)
-			else
-				dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+1].p[1], global_data[i+1].p[2], global_data[i+1].p[3], tocolor(255,0,0,150), 3)
-			end
+	-- oh this is the part where the lines are drawn, to make it more performance friendly, just skip some frames if you're not playbacking
+	for i=displayedFrames[1],displayedFrames[2]-frameSkipping-1,frameSkipping do -- wtf is this mess?
+		if global_data[i] and global_data[i+frameSkipping] then -- yeah just do that
+			dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+frameSkipping].p[1], global_data[i+frameSkipping].p[2], global_data[i+frameSkipping].p[3], (global_data[i].g == 1 and tocolor(150,150,150,150)) or tocolor(255,0,0,150), 3)
 		end
 	end
 end
