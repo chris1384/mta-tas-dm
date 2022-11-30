@@ -30,7 +30,7 @@ It is a complete remake over the old one. It might have a better overall perform
 - Type *start mta-tas-dm* in the server console,
 - You should see an output about the resource that got started.
 
-Done!
+- Done!
 
 ### 2. Commands
 ***You can also experiment with the resource on a freeroam gamemode, just to get the feel of it.***
@@ -67,5 +67,11 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
 
+## Upcoming features
+- Checkpoints, so you can see where you gain or lose time. You must finish the map from start to finish so you can compare it afterwards. (idea by Geass)
+- Slowmotion
+- Pause recording on FPS drops
+- Adding more info (warp data, checkpoints data, frame-by-frame debug lines etc.) into the save files
+- Maybe some ghost peds/vehicles
 
 ## For any help, please contact me on Discord: *chrisu#9616* or on MTA:SA forums (chris1384).
