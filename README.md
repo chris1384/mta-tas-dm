@@ -68,7 +68,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
 
 ## Upcoming features
-- Checkpoints, so you can see where you gain or lose time. You must finish the map from start to finish so you can compare it afterwards. (idea by Geass)
+- Checkpoints, so you can see where you gain or lose time. You must complete the map from start to finish so you can compare it afterwards. (idea by Geass)
 - Slowmotion
 - Pause recording on FPS drops
 - Adding more info (warp data, checkpoints data, frame-by-frame debug lines etc.) into the save files
