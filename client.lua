@@ -23,7 +23,6 @@ local global = 	{
 										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking (unused)
 										showDebug = false, -- show debugging info
 										seeThroughBuilds = false, -- render pathway through objects (unused)
-										warnUser = true, -- warn the user before starting a new recording or before overwritting a saved file
 										sensitiveRecording = true, -- trigger adding a frame right after the recording state has changed (might solve missing frames)
 										
 										showPath = true, -- show debug pathways
@@ -41,6 +40,7 @@ local global = 	{
 						
 						recorded_fps = getFPSLimit(),
 						fps = 0,
+						warnUser = true, -- warn the user before starting a new recording or before overwritting a saved file
 						userWarn_timer = nil,
 						userOverwriteWarn_timer = nil,
 					}
@@ -167,14 +167,14 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRecording failed, stop playbacking first!", 255, 100, 100, true)
 				return
 			end
-			if #global_data > 0 and not global.settings.warnUser then
-				global.settings.warnUser = true
-				global.userWarn_timer = setTimer(function() global.settings.warnUser = false global.userWarn_timer = nil end, 5000, 1)
+			if #global_data > 0 and not global.warnUser then
+				global.warnUser = true
+				global.userWarn_timer = setTimer(function() global.warnUser = false global.userWarn_timer = nil end, 5000, 1)
 				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/record #FFFFFFto continue.", 255, 100, 100, true)
 				return
 			end
 			global.recording = true
-			global.settings.warnUser = false
+			global.warnUser = false
 			if global.userWarn_timer then killTimer(global.userWarn_timer) global.userWarn_timer = nil end
 			global_data = {}
 			global.recorded_fps = getFPSLimit()
@@ -198,9 +198,9 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRecording failed, stop playbacking first!", 255, 100, 100, true)
 				return
 			end
-			if #global_data > 0 and not global.settings.warnUser then
-				global.settings.warnUser = true
-				global.userWarn_timer = setTimer(function() global.settings.warnUser = false global.userWarn_timer = nil end, 5000, 1)
+			if #global_data > 0 and not global.warnUser then
+				global.warnUser = true
+				global.userWarn_timer = setTimer(function() global.warnUser = false global.userWarn_timer = nil end, 5000, 1)
 				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/recordf #FFFFFFto continue.", 255, 100, 100, true)
 				return
 			end
@@ -210,7 +210,7 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRegular recording enabled, switching to frame-by-frame!", 255, 100, 100, true)
 			end
 			global.recording_fbf = true
-			global.settings.warnUser = false
+			global.warnUser = false
 			if global.userWarn_timer then killTimer(global.userWarn_timer) global.userWarn_timer = nil end
 			global_data = {}
 			renderRecording()
@@ -437,9 +437,23 @@ function globalCommands(cmd, ...)
 		if args[1] then
 			if #global_data > 0 then
 				local file_name = "saves/"..args[1]..".txt" -- got rid of that mf
-				if fileExists("@"..file_name) then
-				
-				end
+				--if global.warnUser then
+					if fileExists("@"..file_name) then
+						if not global.userOverwriteWarn_timer then
+							global.userOverwriteWarn_timer = setTimer(function() global.userOverwriteWarn_timer = nil end, 5000, 1)
+							outputChatBox("[TAS] #FFFFFFAre you sure you want to overwrite #FF6464'"..file_name.."'#ffffff? Type #FF6464/saver [file] #FFFFFFto continue.", 255, 100, 100, true)
+							return
+						else
+							if global.userOverwriteWarn_timer then
+								if isTimer(global.userOverwriteWarn_timer) then
+									killTimer(global.userOverwriteWarn_timer)
+								end
+								global.userOverwriteWarn_timer = nil
+							end
+							fileDelete("@"..file_name)
+						end
+					end
+				--end
 				local file = fileCreate("@"..file_name)
 				if file then
 					--local whole_ass_data = {recording_data = global_data, details = {warps = {}, }} -- still to be worked on
@@ -513,14 +527,14 @@ function globalKeys(key, state)
 				global.step_cached = global.step
 				removeEventHandler("onClientRender", root, renderRecording)
 				addEventHandler("onClientRender", root, renderPlaybacking)
-				outputChatBox("[TAS] #FFFFFFRewinding..", 100, 255, 255, true)
+				--outputChatBox("[TAS] #FFFFFFRewinding..", 100, 255, 255, true)
 			else
 				global.rewinding = false
 				removeEventHandler("onClientRender", root, renderPlaybacking)
 				addEventHandler("onClientRender", root, renderRecording)
 				resetBinds()
 				global.slow_pressed = false
-				outputChatBox("[TAS] #FFFFFFRewinding complete!", 100, 255, 255, true)
+				--outputChatBox("[TAS] #FFFFFFRewinding complete!", 100, 255, 255, true)
 			end
 
 		-- to be continued
