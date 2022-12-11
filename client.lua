@@ -7,11 +7,13 @@ local global = 	{
 						recording = false, -- do not change
 						playbacking = false, -- do not change
 						recording_fbf = false, -- do not change
-						recording_rewinding = false, -- do not change
+						rewinding = false, -- do not change
 						
 						fbf_switch = 0, -- important
 						
 						step = 0, -- important
+						step_cached = 0, -- lazy variable, used for slow rewinding
+						slow_pressed = false, -- lazy variable, used for slow rewinding
 						
 						
 						-- settings
@@ -20,16 +22,27 @@ local global = 	{
 										playback_mapStart = false, -- trigger playbacking on map start (unused)
 										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking (unused)
 										showDebug = false, -- show debugging info
-										seeThroughBuilds = false, -- render waypoints through objects (unused)
-										warnUser = true, -- warn the user before starting a new recording
+										seeThroughBuilds = false, -- render pathway through objects (unused)
+										warnUser = true, -- warn the user before starting a new recording or before overwritting a saved file
+										sensitiveRecording = true, -- trigger adding a frame right after the recording state has changed (might solve missing frames)
+										
+										showPath = true, -- show debug pathways
+										frameSkipping = 15, -- used for rendering pathways, change to a greater value for lower detail of the run
+										displayedFrames = 	{
+																forward = 120, -- how many frames should we render ahead?
+																backward = 0 -- and behind
+															},
 									},
 						
 						-- settings for drawn info
-						dx_settings = {}, -- unused
+						dx_settings = 	{
+											offsetH = 100,
+										},
 						
 						recorded_fps = getFPSLimit(),
 						fps = 0,
 						userWarn_timer = nil,
+						userOverwriteWarn_timer = nil,
 					}
 					
 -- Registered commands (edit to your liking)
@@ -57,7 +70,8 @@ local global_warps = {}
 local entities = {}
 
 -- Registered keys
-local registered_keys = {	["w"] = "accelerate", 
+local registered_keys = {
+							["w"] = "accelerate", 
 							["a"] = "vehicle_left",
 							["s"] = "brake_reverse",
 							["d"] = "vehicle_right",
@@ -77,27 +91,67 @@ local registered_keys = {	["w"] = "accelerate",
 -- Optimization
 local table_insert = table.insert
 local table_remove = table.remove
+local math_floor = math.floor
 local pairs = pairs
 local ipairs = ipairs
-local math_floor = math.floor
 local tostring = tostring
+local tonumber = tonumber
+local tocolor = tocolor
+
+local getKeyState = getKeyState
+local getPedOccupiedVehicle = getPedOccupiedVehicle
+local getPedControlState = getPedControlState
+local getVehicleController = getVehicleController
+local getVehicleNitroLevel = getVehicleNitroLevel
+local getVehicleUpgradeOnSlot = getVehicleUpgradeOnSlot
+local isVehicleWheelOnGround = isVehicleWheelOnGround
+local isVehicleNitroActivated = isVehicleNitroActivated
+local isVehicleNitroRecharging = isVehicleNitroRecharging
+local getCameraTarget = getCameraTarget
+local getElementPosition = getElementPosition
+local getElementRotation = getElementRotation
+local getElementVelocity = getElementVelocity
+local getElementAngularVelocity = getElementAngularVelocity
+local getElementModel = getElementModel
+local getElementHealth = getElementHealth
+local getElementType = getElementType
+
+local setPedControlState = setPedControlState
+local setElementPosition = setElementPosition
+local setElementRotation = setElementRotation
+local setElementVelocity = setElementVelocity
+local setElementAngularVelocity = setElementAngularVelocity
+local setElementModel = setElementModel
+local setElementHealth = setElementHealth
+local setVehicleNitroLevel = setVehicleNitroLevel
+local setVehicleNitroActivated = setVehicleNitroActivated
+
+local dxDrawLine3D = dxDrawLine3D
+local dxDrawRectangle = dxDrawRectangle
+local dxDrawText = dxDrawText
 
 -- Initializing
 addEventHandler("onClientResourceStart", resourceRoot, function()
+
 	outputChatBox("[TAS] #FFFFFFRecording Tool by #FFAAFFchris1384 #FFFFFFhas started!", 255, 100, 100, true)
 	outputChatBox("[TAS] #FFFFFFType #FF6464/"..registered_commands.help.." #FFFFFFfor commands!", 255, 100, 100, true)
 	
-	for k,v in pairs(registered_commands) do
+	for _,v in pairs(registered_commands) do
 		addCommandHandler(v, globalCommands)
 	end
 	
-	addEventHandler("onClientPreRender", root, renderFPS)
+	addEventHandler("onClientPreRender", root, function(deltaTime) global.fps = 1000/deltaTime end) -- remade as an entire function
+	
+	bindKey("backspace", "both", globalKeys) -- rewinding
+	
 end)
 
 -- Registering commands
 function globalCommands(cmd, ...)
+
 	local args = {...}
 	local vehicle = getPedOccupiedVehicle(localPlayer)
+	
 	-- record
 	if cmd == registered_commands.record then
 		if global.recording then
@@ -127,6 +181,8 @@ function globalCommands(cmd, ...)
 			addEventHandler("onClientRender", root, renderRecording)
 			outputChatBox("[TAS] #FFFFFFRecording frames..", 100, 255, 100, true)
 		end
+		
+		
 	-- frame-by-frame record
 	elseif cmd == registered_commands.record_frame then
 		if global.recording_fbf then
@@ -164,12 +220,16 @@ function globalCommands(cmd, ...)
 			outputChatBox("[TAS] #FFFFFFFrame-by-frame recording started!", 100, 255, 100, true)
 			outputChatBox("[TAS] #FFFFFFFrame #1", 100, 255, 100, true)
 		end
+		
+		
 	-- fbf next frame
 	elseif cmd == registered_commands.next_frame then
 		if global.recording_fbf then
 			global.fbf_switch = 1
 			outputChatBox("[TAS] #FFFFFFFrame #"..tostring(#global_data+1).."", 100, 255, 100, true)
 		end
+		
+		
 	-- fbf previous frame
 	elseif cmd == registered_commands.previous_frame then
 		if global.recording_fbf then
@@ -178,6 +238,8 @@ function globalCommands(cmd, ...)
 			table_remove(global_data, last_step)
 			outputChatBox("[TAS] #FFFFFFFrame #"..tostring(last_step-1).."", 100, 255, 100, true)
 		end
+		
+		
 	-- record switch
 	elseif cmd == registered_commands.switch_record then
 		if global.playbacking then
@@ -199,6 +261,8 @@ function globalCommands(cmd, ...)
 			addEventHandler("onClientRender", root, renderRecording)
 			outputChatBox("[TAS] #FFFFFFSwitched to REGULAR recording!", 100, 255, 100, true)
 		end
+		
+		
 	-- playback
 	elseif cmd == registered_commands.playback then
 		if global.playbacking then
@@ -220,10 +284,13 @@ function globalCommands(cmd, ...)
 			addEventHandler("onClientRender", root, renderPlaybacking)
 			outputChatBox("[TAS] #FFFFFFPlayback started!", 100, 100, 255, true)
 		end
+		
+		
 	-- warps
+	-- save
 	elseif cmd == registered_commands.save_warp then
 		if vehicle then
-			if isPedDead(localPlayer) or getCameraTargetPlayer() ~= localPlayer then return end
+			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 
 			local x, y, z = getElementPosition(vehicle)
 			local rx, ry, rz = getElementRotation(vehicle)
@@ -248,10 +315,12 @@ function globalCommands(cmd, ...)
 						)
 			outputChatBox("[TAS] #FFFFFFWarp #3cb4ff#"..tostring(#global_warps).." #ffffffsaved!", 60, 180, 255, true)
 		end
+	-- load (yes, you can actually use this as a save/load warp script without the use of recording)
 	elseif cmd == registered_commands.load_warp then
 		if vehicle then
-			if isPedDead(localPlayer) or getCameraTargetPlayer() ~= localPlayer then return end
+			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 			if #global_warps == 0 then outputChatBox("[TAS] #FFFFFFLoading warp failed, no data found!", 255, 100, 100, true) return end
+			if global.playbacking then outputChatBox("[TAS] #FFFFFFLoading warp failed, please disable playbacking!", 255, 100, 100, true) return end
 			if global.recording_fbf then outputChatBox("[TAS] #FFFFFFLoading warp failed, please switch to REGULAR recording!", 255, 100, 100, true) return end -- still to be worked on
 			local w_data = global_warps[#global_warps]
 			if global.recording then
@@ -269,6 +338,7 @@ function globalCommands(cmd, ...)
 			setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
 			setElementFrozen(vehicle, true)
 			if global.warp_timer then if isTimer(global.warp_timer) then killTimer(global.warp_timer) end global.warp_timer = nil end
+			-- i hate this part so much
 			global.warp_timer = setTimer(function()
 				setElementFrozen(vehicle, false)
 				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3]) -- doing it again just to make sure
@@ -277,25 +347,29 @@ function globalCommands(cmd, ...)
 				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
 				setVehicleNitroLevel(vehicle, w_data.n)
 				if global.recording then
-					renderRecording()
+					if global.settings.sensitiveRecording then renderRecording() end
 					addEventHandler("onClientRender", root, renderRecording)
 				end
 			end, 500, 1)
 			outputChatBox("[TAS] #FFFFFFWarp #ffb43c#"..tostring(#global_warps).." #ffffffloaded!", 255, 180, 60, true)
 		end
+	-- delete
 	elseif cmd == registered_commands.delete_warp then
 		if #global_warps == 1 then outputChatBox("[TAS] #FFFFFFWarp #1 cannot be deleted!", 255, 100, 100, true) return end
 		table_remove(global_warps, #global_warps)
 		outputChatBox("[TAS] #FFFFFFWarp #ff3232#"..tostring(#global_warps).." #ffffffdeleted!", 255, 50, 50, true)
+		
+		
 	-- resuming
 	elseif cmd == registered_commands.resume then
-		local frame = #global_data
+		-- aight so this part is a sign of dodgy code (love tom), it's hella ugly
+		local frame = #global_data-1 -- added -1 because it triggered a funny error message before
 		if args[1] and tonumber(args[1]) then -- wow tryna make fun of myself that's ugly
 			frame = tonumber(args[1])
 		end
 		if frame > #global_data or frame < 1 then outputChatBox("[TAS] #FFFFFFResuming run failed, you can't resume from that frame!", 255, 100, 100, true) return end
 		if vehicle then
-			if isPedDead(localPlayer) or getCameraTargetPlayer() ~= localPlayer then return end
+			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 			if #global_data == 0 then outputChatBox("[TAS] #FFFFFFResuming run failed, no data found!", 255, 100, 100, true) return end
 			if global.playback then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop playbacking!", 255, 100, 100, true) return end
 			if global.recording or global.recording_fbf then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop recording first!", 255, 100, 100, true) return end
@@ -323,6 +397,7 @@ function globalCommands(cmd, ...)
 			setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
 			setElementFrozen(vehicle, true)
 			if global.warp_timer then if isTimer(global.warp_timer) then killTimer(global.warp_timer) end global.warp_timer = nil end
+			-- i hate this part so much
 			global.warp_timer = setTimer(function()
 				setElementFrozen(vehicle, false)
 				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
@@ -331,13 +406,15 @@ function globalCommands(cmd, ...)
 				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
 				setVehicleNitroLevel(vehicle, w_data.n.l)
 				if global.recording then
-					renderRecording()
+					if global.settings.sensitiveRecording then renderRecording() end
 					addEventHandler("onClientRender", root, renderRecording)
 				end
 			end, 500, 1)
 			outputChatBox("[TAS] #FFFFFFRun resumed from frame #64ff64#"..tostring(frame).." #ffffff! Recording frames..", 100, 255, 100, true)
 			outputChatBox("[TAS] #FFFFFFSaved warp as #3cb4ff#"..tostring(#global_warps).." #ffffff!", 60, 180, 255, true)
 		end
+		
+		
 	-- seeking
 	elseif cmd == registered_commands.seek then
 		local frame
@@ -353,11 +430,16 @@ function globalCommands(cmd, ...)
 			global.step = frame
 			outputChatBox("[TAS] #FFFFFFSeek to frame #6464FF#"..tostring(frame).."#ffffff!", 100, 100, 255, true)
 		end
+		
+	-- loading and saving
 	-- save run
 	elseif cmd == registered_commands.save_record then
 		if args[1] then
 			if #global_data > 0 then
-				local file_name = "saves/"..args[1].."_"..tostring(math.random(1000,9999))..".txt"
+				local file_name = "saves/"..args[1]..".txt" -- got rid of that mf
+				if fileExists("@"..file_name) then
+				
+				end
 				local file = fileCreate("@"..file_name)
 				if file then
 					--local whole_ass_data = {recording_data = global_data, details = {warps = {}, }} -- still to be worked on
@@ -391,6 +473,8 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFLoading file failed, it does not exist or it has invalid data!", 255, 100, 100, true)
 			end
 		end
+		
+		
 	-- debug
 	elseif cmd == registered_commands.debug then
 		if global.settings.showDebug then
@@ -402,6 +486,8 @@ function globalCommands(cmd, ...)
 			addEventHandler("onClientHUDRender", root, renderDebug)
 			outputChatBox("[TAS] #FFFFFFDebugging is now #FF64FFENABLED!", 255, 100, 255, true)
 		end
+		
+		
 	-- tashelp
 	elseif cmd == registered_commands.help then
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.record.." | /"..registered_commands.record_frame.." - start recording | frame-by-frame recording", 255, 100, 100, true)
@@ -414,6 +500,37 @@ function globalCommands(cmd, ...)
 		outputChatBox("[TAS] #FFFFFFBACKSPACE - rewind during recording (+L-SHIFT fast rewind | +L-ALT slow rewind)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.load_record.." [file] | /"..registered_commands.save_record.." [file] - load | save record data", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.debug.." - toggle debugging", 255, 100, 100, true)
+	end
+	
+end
+
+function globalKeys(key, state)
+	if key == "backspace" then
+		if global.recording then -- when recording
+			if state == "down" then
+				global.rewinding = true
+				global.step = #global_data
+				global.step_cached = global.step
+				removeEventHandler("onClientRender", root, renderRecording)
+				addEventHandler("onClientRender", root, renderPlaybacking)
+				outputChatBox("[TAS] #FFFFFFRewinding..", 100, 255, 255, true)
+			else
+				global.rewinding = false
+				removeEventHandler("onClientRender", root, renderPlaybacking)
+				addEventHandler("onClientRender", root, renderRecording)
+				resetBinds()
+				global.slow_pressed = false
+				outputChatBox("[TAS] #FFFFFFRewinding complete!", 100, 255, 255, true)
+			end
+
+		-- to be continued
+		elseif global.recording_fbf then -- when fbf recording
+			return
+		elseif global.playbacking then -- when playbacking
+			return
+		else -- when lifeless
+			return
+		end
 	end
 end
 
@@ -453,7 +570,7 @@ function renderRecording()
 				end
 			end
 			
-			local vehicle_onground = 0
+			local vehicle_onground = nil -- changed to nil because it might be wasteful to store unnecessary data
 			
 			for i=0,3 do
 				if isVehicleWheelOnGround(vehicle, i) then
@@ -475,7 +592,7 @@ function renderRecording()
 											g = vehicle_onground
 										}
 						)
-			
+						
 		end
 	else
 		global.recording = false
@@ -492,13 +609,12 @@ function renderPlaybacking()
 			removeEventHandler("onClientRender", root, renderPlaybacking)
 			-- this is an anomaly, the event below MIGHT trigger after the next~NEEEXT frame was rendered
 			-- i'm making sure it is working as it should
-			renderRecording()
+			if global.settings.sensitiveRecording then renderRecording() end
 			addEventHandler("onClientRender", root, renderRecording)
 			return
 		end
 		
-		local s = global.step
-		local data = global_data[s]
+		local data = global_data[global.step]
 		
 		setElementPosition(vehicle, unpack(data.p))
 		setElementRotation(vehicle, unpack(data.r))
@@ -515,6 +631,8 @@ function renderPlaybacking()
 			end
 		end
 		setVehicleNitroLevel(vehicle, data.n.l)
+		
+		-- tbh? this could be improved a lot but idk
 		if not global.recording_fbf then
 			resetBinds()
 			for k,v in pairs(registered_keys) do
@@ -525,9 +643,55 @@ function renderPlaybacking()
 				end
 			end
 		end
-		if global.recording_fbf and global.fbf_switch == 0 then return end
+		
+		-- it's important
+		if global.recording_fbf and global.fbf_switch == 0 then 
+			return 
+		elseif global.rewinding then -- becomes tricky, since i did announce slow and fast rewinding (and it becomes very ugly indeed)
+		
+			-- 1st part, FAST REWINDING
+			if getKeyState("lshift") then
+				if #global_data > 2 then
+					global.step = global.step - 2
+					for i=1, 2 do table_remove(global_data, #global_data) end
+				else
+					global.step = 1
+				end
+				
+			-- OWW WHAT DA HEEEEEEEEEEEEEEEEEEEEEEEEEE
+			-- 2ND part, ~sloooooow~ REWINDING
+			elseif getKeyState("lalt") then
+				if not global.slow_pressed then
+					global.step_cached = #global_data
+					global.slow_pressed = true
+				end
+				global.step_cached = global.step_cached - 0.25
+				if #global_data <= 1 then
+					global.step_cached = 1
+					global.step = 1
+				elseif global_data[global.step_cached] then
+					if #global_data > 1 then
+						global.step = global.step_cached
+						table_remove(global_data, #global_data)
+					end
+				end
+				
+			-- if there's no extra key press
+			-- 3rd part, regular rewinding
+			else
+				if #global_data > 1 then
+					global.step = global.step - 1 
+					table_remove(global_data, #global_data)
+				else
+					global.step = 1
+				end
+				if global.slow_pressed then global.slow_pressed = false end
+			end
+			return 
+		end
 		global.step = global.step + 1
 		if global.step > #global_data then global.step = #global_data end
+		
 	else
 		if global.playbacking then
 			global.playbacking = false
@@ -544,15 +708,14 @@ function resetBinds()
 	end
 end
 
-local keyboard_offset = 100 -- lazy variable
-
 function renderDebug()
 
 	local displayedFrames = {1, #global_data-1}
-	local frameSkipping = 15
+	local frameSkipping = global.settings.frameSkipping
 
 	local rc_stat = "#FF6464FALSE"
 	if global.recording then rc_stat = "#64FF64TRUE" elseif global.recording_fbf then rc_stat = "#64FF64TRUE (Frame-By-Frame)" elseif global.userWarn_timer then rc_stat = "#FFFF64AWAITING STATUS.." end
+	if global.rewinding then rc_stat = "#64FF64TRUE #64FFFF(REWINDING..)" end
 	
 	local fps_stat = ""
 	if global.fps < global.recorded_fps - 2 then
@@ -564,45 +727,43 @@ function renderDebug()
 	local pb_stat = "#FF6464FALSE"
 	if global.playbacking then 
 		pb_stat = "#64FF64TRUE" 
-		displayedFrames = {global.step-50, global.step+200} -- if you're playbacking, preview all frames instead of skipping some of them
+		displayedFrames = {global.step-global.settings.displayedFrames.backward, global.step+global.settings.displayedFrames.forward} -- if you're playbacking, preview all frames instead of skipping some of them
 		frameSkipping = 1 
 	end
 	
-	_text("Recording: "..rc_stat.." "..fps_stat, screenW/2-keyboard_offset+170, screenH-200, 0, 0, 1, "default", "left", "top", false, false, false, true)
-	_text("Playbacking: "..pb_stat, screenW/2-keyboard_offset+170, screenH-200+18, 0, 0, 1, "default", "left", "top", false, false, false, true)
-	_text("Current Frame: #"..tostring(global.step).."", screenW/2-keyboard_offset+170, screenH-200+18*2, 0, 0, 1, "default", "left", "top", false, false, false, true)
-	_text("Total Frames: #"..tostring(#global_data).."", screenW/2-keyboard_offset+170, screenH-200+18*3, 0, 0, 1, "default", "left", "top", false, false, false, true)
-	_text("Warp ID: #00FFFF#"..tostring(#global_warps).."", screenW/2-keyboard_offset+170, screenH-200+18*4, 0, 0, 1, "default", "left", "top", false, false, false, true)
+	_text("Recording: "..rc_stat.." "..fps_stat, screenW/2-global.dx_settings.offsetH+170, screenH-200, 0, 0, 1, "default", "left", "top", false, false, false, true)
+	_text("Playbacking: "..pb_stat, screenW/2-global.dx_settings.offsetH+170, screenH-200+18, 0, 0, 1, "default", "left", "top", false, false, false, true)
+	_text("Current Frame: #"..tostring(global.step).." | Cached: #"..tostring(global.step_cached).."", screenW/2-global.dx_settings.offsetH+170, screenH-200+18*2, 0, 0, 1, "default", "left", "top", false, false, false, true)
+	_text("Total Frames: #"..tostring(#global_data).."", screenW/2-global.dx_settings.offsetH+170, screenH-200+18*3, 0, 0, 1, "default", "left", "top", false, false, false, true)
+	_text("Warp ID: #00FFFF#"..tostring(#global_warps).."", screenW/2-global.dx_settings.offsetH+170, screenH-200+18*4, 0, 0, 1, "default", "left", "top", false, false, false, true)
 	
-	drawKey("W", screenW/2-keyboard_offset, screenH-200, 40, 40, getPedControlState(localPlayer, "accelerate") and tocolor(60, 255, 60, 255))
-	drawKey("S", screenW/2-keyboard_offset, screenH-200+44, 40, 40, getPedControlState(localPlayer, "brake_reverse") and tocolor(255, 60, 60, 255))
-	drawKey("A", screenW/2-keyboard_offset-44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_left") and tocolor(255, 180, 60, 255))
-	drawKey("D", screenW/2-keyboard_offset+44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_right") and tocolor(255, 180, 60, 255))
-	drawKey("FIRE", screenW/2-keyboard_offset-64, screenH-200+88, 60, 40, (getPedControlState(localPlayer, "vehicle_fire") or getPedControlState(localPlayer, "vehicle_secondary_fire")) and tocolor(60, 200, 255, 255))
-	drawKey("SPACE", screenW/2-keyboard_offset, screenH-200+88, 160, 40, getPedControlState(localPlayer, "handbrake") and tocolor(255, 60, 60, 255))
-	drawKey("ᐱ", screenW/2-keyboard_offset+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
-	drawKey("ᐯ", screenW/2-keyboard_offset+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
+	drawKey("W", screenW/2-global.dx_settings.offsetH, screenH-200, 40, 40, getPedControlState(localPlayer, "accelerate") and tocolor(60, 255, 60, 255))
+	drawKey("S", screenW/2-global.dx_settings.offsetH, screenH-200+44, 40, 40, getPedControlState(localPlayer, "brake_reverse") and tocolor(255, 60, 60, 255))
+	drawKey("A", screenW/2-global.dx_settings.offsetH-44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_left") and tocolor(255, 180, 60, 255))
+	drawKey("D", screenW/2-global.dx_settings.offsetH+44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_right") and tocolor(255, 180, 60, 255))
+	drawKey("FIRE", screenW/2-global.dx_settings.offsetH-64, screenH-200+88, 60, 40, (getPedControlState(localPlayer, "vehicle_fire") or getPedControlState(localPlayer, "vehicle_secondary_fire")) and tocolor(60, 200, 255, 255))
+	drawKey("SPACE", screenW/2-global.dx_settings.offsetH, screenH-200+88, 160, 40, getPedControlState(localPlayer, "handbrake") and tocolor(255, 60, 60, 255))
+	drawKey("ᐱ", screenW/2-global.dx_settings.offsetH+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
+	drawKey("ᐯ", screenW/2-global.dx_settings.offsetH+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
 	
 	-- oh this is the part where the lines are drawn, to make it more performance friendly, just skip some frames if you're not playbacking
-	for i=displayedFrames[1],displayedFrames[2]-frameSkipping-1,frameSkipping do -- wtf is this mess?
-		if global_data[i] and global_data[i+frameSkipping] then -- yeah just do that
-			dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+frameSkipping].p[1], global_data[i+frameSkipping].p[2], global_data[i+frameSkipping].p[3], (global_data[i].g == 1 and tocolor(150,150,150,150)) or tocolor(255,0,0,150), 3)
+	if global.settings.showPath then -- why even try
+		for i=displayedFrames[1],displayedFrames[2]-frameSkipping-1,frameSkipping do -- wtf is this mess?
+			if global_data[i] and global_data[i+frameSkipping] then -- yeah just do that
+				dxDrawLine3D(global_data[i].p[1], global_data[i].p[2], global_data[i].p[3], global_data[i+frameSkipping].p[1], global_data[i+frameSkipping].p[2], global_data[i+frameSkipping].p[3], ((global_data[i].g and global_data[i].g == 1) and tocolor(150,150,150,150)) or tocolor(255,0,0,150), 3)
+			end
 		end
 	end
 end
 
-function drawKey(keyName, x, y, x2, y2, color)
+function drawKey(keyName, x, y, x2, y2, color) -- draw keys
 	dxDrawRectangle(x, y, x2, y2, color or tocolor(200, 200, 200, 200))
 	dxDrawText(keyName, x, y, x+x2, y+y2, tocolor(0, 0, 0, 255), 1.384, "default-bold", "center", "center")
 end
 
-function _text(text, x, y, x2, y2, ...)
+function _text(text, x, y, x2, y2, ...) -- draw shadow text
 	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x2+1, y2+1, tocolor(0,0,0,255), ...)
 	dxDrawText(text, x, y, x2, y2, tocolor(255,255,255,255), ...)
-end
-
-function renderFPS(deltaTime)
-	global.fps = 1000/deltaTime
 end
 
 function _float(number)
@@ -610,31 +771,6 @@ function _float(number)
 		if number % 1 == 0 then 
 			return number 
 		end
-		return (math_floor(number*10000))/10000 -- added another 0 for precision
+		return (math_floor(number*1000))/1000 -- add another 0 for precision and then revert it cause it didn't matter
 	end
 end
-
-function getCameraTargetPlayer()
-	local element = getCameraTarget()
-	if element and getElementType(element) == "vehicle" then
-		element = getVehicleController(element)
-	else
-		return false
-	end
-	return element
-end
-
-function isEventHandlerAdded( sEventName, pElementAttachedTo, func )
-    if type( sEventName ) == 'string' and isElement( pElementAttachedTo ) and type( func ) == 'function' then
-        local aAttachedFunctions = getEventHandlers( sEventName, pElementAttachedTo )
-        if type( aAttachedFunctions ) == 'table' and #aAttachedFunctions > 0 then
-            for i, v in ipairs( aAttachedFunctions ) do
-                if v == func then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
