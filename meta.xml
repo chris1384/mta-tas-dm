@@ -1,5 +1,5 @@
 <meta>
-    <info author="chris1384" version="1.0" name="TAS - Recording Tool" description="Only to be used in Racing Maps" type="script" />
+    <info author="chris1384" version="1.1" name="TAS - Recording Tool" description="Tool to prove to others that you can play" type="script" />
     <min_mta_version client="1.5.5-9.14060"></min_mta_version>
     <script src="client.lua" type="client" cache="false" />
 </meta>
