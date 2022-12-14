@@ -298,7 +298,7 @@ function globalCommands(cmd, ...)
 			local rvx, rvy, rvz = getElementAngularVelocity(vehicle)
 			local model = getElementModel(vehicle)
 			local health = getElementHealth(vehicle)
-			local nitro = {}
+			local nitro = nil
 			if getVehicleUpgradeOnSlot(vehicle, 8) then
 				nitro = {l = _float(getVehicleNitroLevel(vehicle)), r = isVehicleNitroRecharging(vehicle), a = isVehicleNitroActivated(vehicle)}
 			end
@@ -572,7 +572,7 @@ function renderRecording()
 			local rvx, rvy, rvz = getElementAngularVelocity(vehicle)
 			local model = getElementModel(vehicle)
 			local health = getElementHealth(vehicle)
-			local nitro = {}
+			local nitro = nil -- changed this one to nil, just to save some space
 			if getVehicleUpgradeOnSlot(vehicle, 8) then
 				nitro = {l = _float(getVehicleNitroLevel(vehicle)), r = isVehicleNitroRecharging(vehicle), a = isVehicleNitroActivated(vehicle)}
 			end
@@ -637,14 +637,17 @@ function renderPlaybacking()
 		if getElementModel(vehicle) ~= data.m then setElementModel(vehicle, data.m) end -- is it really doing it better or something?
 		setElementHealth(vehicle, data.h)
 		
-		if not data.n.a and data.n.r then
-			setVehicleNitroActivated(vehicle, false)
-		elseif data.n.a and not data.n.r then
-			if not isVehicleNitroActivated(vehicle) then 
-				setVehicleNitroActivated(vehicle, true) 
+		if getVehicleUpgradeOnSlot(vehicle, 8) then
+			-- this is the part that was left unfixed for a while, it should work fine now cool cool
+			if not data.n.a and data.n.r then
+				setVehicleNitroActivated(vehicle, false)
+			elseif data.n.a and not data.n.r then
+				if not isVehicleNitroActivated(vehicle) then 
+					setVehicleNitroActivated(vehicle, true) 
+				end
 			end
+			setVehicleNitroLevel(vehicle, data.n.l)
 		end
-		setVehicleNitroLevel(vehicle, data.n.l)
 		
 		-- tbh? this could be improved a lot but idk
 		if not global.recording_fbf then
@@ -680,11 +683,11 @@ function renderPlaybacking()
 					global.slow_pressed = true
 				end
 				global.step_cached = global.step_cached - 0.25
-				if #global_data <= 1 then
-					global.step_cached = 1
-					global.step = 1
+				if #global_data <= 2 then
+					global.step_cached = 2
+					global.step = 2
 				elseif global_data[global.step_cached] then
-					if #global_data > 1 then
+					if #global_data > 2 then
 						global.step = global.step_cached
 						table_remove(global_data, #global_data)
 					end
@@ -693,11 +696,11 @@ function renderPlaybacking()
 			-- if there's no extra key press
 			-- 3rd part, regular rewinding
 			else
-				if #global_data > 1 then
+				if #global_data > 2 then
 					global.step = global.step - 1 
 					table_remove(global_data, #global_data)
 				else
-					global.step = 1
+					global.step = 2
 				end
 				if global.slow_pressed then global.slow_pressed = false end
 			end
