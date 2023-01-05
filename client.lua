@@ -9,7 +9,10 @@ local global = 	{
 						recording_fbf = false, -- do not change
 						rewinding = false, -- do not change
 						
-						fbf_switch = 0, -- important
+						fbf_switch = 0, -- important and explanation:
+						-- 0: fbf is running, frame freezed
+						-- 1: awaiting next frame for position update
+						-- 2: return to 0 and freeze the frame again
 						
 						step = 0, -- important
 						step_cached = 0, -- lazy variable, used for slow rewinding
@@ -18,12 +21,13 @@ local global = 	{
 						
 						-- settings
 						settings = 	{
-										record_mapStart = false, -- trigger recording on map start (not working if recorded data is found) (unused)
-										playback_mapStart = false, -- trigger playbacking on map start (unused)
-										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking (unused)
-										showDebug = false, -- show debugging info
+										trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead (merged into one variable)
+										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking
+										showDebug = false, -- show debugging info (also works on script start)
 										seeThroughBuilds = false, -- render pathway through objects (unused)
-										sensitiveRecording = true, -- trigger adding a frame right after the recording state has changed (might solve missing frames)
+										sensitiveRecording = false, -- trigger adding a frame right after the recording state has changed (keep it disabled as it's outdated and might produce extra frames)
+										
+										warnUser = true, -- warn the user before starting a new recording or before overwritting a saved file
 										
 										showPath = true, -- show debug pathways
 										frameSkipping = 15, -- used for rendering pathways, change to a greater value for lower detail of the run
@@ -40,9 +44,12 @@ local global = 	{
 						
 						recorded_fps = getFPSLimit(),
 						fps = 0,
-						warnUser = true, -- warn the user before starting a new recording or before overwritting a saved file
-						userWarn_timer = nil,
-						userOverwriteWarn_timer = nil,
+						timers = 	{
+										fbf = nil, -- used for holding the previous frame button (unused)
+										record = nil, -- warn for new record
+										save = nil, -- warn for overwriting
+										clear = nil -- warn for clearing all data
+									},
 					}
 					
 -- Registered commands (edit to your liking)
@@ -61,6 +68,8 @@ local registered_commands = {
 								resume = "resume",
 								seek = "seek",
 								debug = "debugr",
+								autotas = "autotas", -- new
+								clear_all = "clearall", -- new
 								help = "tashelp",
 							}
 							
@@ -144,6 +153,33 @@ addEventHandler("onClientResourceStart", resourceRoot, function()
 	
 	bindKey("backspace", "both", globalKeys) -- rewinding
 	
+	if global.settings.showDebug then
+		addEventHandler("onClientHUDRender", root, renderDebug)
+		addEventHandler("onClientHUDRender", root, renderPathway)
+	end
+	
+end)
+
+-- Registering custom events
+addEvent("tas:triggerCommand", true)
+addEventHandler("tas:triggerCommand", root, function(command)
+	if not global.settings.trigger_mapStart then return end
+	if command == "Started" then
+		if global.recording or global.recording_fbf or global.playback then return end
+		if #global_data > 0 then
+			executeCommandHandler("playback")
+		else
+			executeCommandHandler("record")
+		end
+	elseif command == "Stop" then
+		if global.recording then
+			executeCommandHandler("record")
+		elseif global.recording_fbf then
+			executeCommandHandler("recordf")
+		elseif global.playbacking then
+			executeCommandHandler("playback")
+		end
+	end
 end)
 
 -- Registering commands
@@ -167,15 +203,13 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRecording failed, stop playbacking first!", 255, 100, 100, true)
 				return
 			end
-			if #global_data > 0 and not global.warnUser then
-				global.warnUser = true
-				global.userWarn_timer = setTimer(function() global.warnUser = false global.userWarn_timer = nil end, 5000, 1)
-				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/record #FFFFFFto continue.", 255, 100, 100, true)
+			if #global_data > 0 and global.settings.warnUser and not (global.timers.record and isTimer(global.timers.record)) then
+				global.timers.record = setTimer(function() global.timers.record = nil end, 5000, 1)
+				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/"..registered_commands.record.." #FFFFFFto continue.", 255, 100, 100, true)
 				return
 			end
 			global.recording = true
-			global.warnUser = false
-			if global.userWarn_timer then killTimer(global.userWarn_timer) global.userWarn_timer = nil end
+			if global.timers.record then if isTimer(global.timers.record) then killTimer(global.timers.record) end global.timers.record = nil end
 			global_data = {}
 			global.recorded_fps = getFPSLimit()
 			addEventHandler("onClientRender", root, renderRecording)
@@ -198,10 +232,9 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRecording failed, stop playbacking first!", 255, 100, 100, true)
 				return
 			end
-			if #global_data > 0 and not global.warnUser then
-				global.warnUser = true
-				global.userWarn_timer = setTimer(function() global.warnUser = false global.userWarn_timer = nil end, 5000, 1)
-				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/recordf #FFFFFFto continue.", 255, 100, 100, true)
+			if #global_data > 0 and global.settings.warnUser and not (global.timers.record and isTimer(global.timers.record)) then
+				global.timers.record = setTimer(function() global.timers.record = nil end, 5000, 1)
+				outputChatBox("[TAS] #FFFFFFAre you sure you want to start a new recording? Type #FF6464/"..registered_commands.record_frame.." #FFFFFFto continue.", 255, 100, 100, true)
 				return
 			end
 			if global.recording then
@@ -210,8 +243,7 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRegular recording enabled, switching to frame-by-frame!", 255, 100, 100, true)
 			end
 			global.recording_fbf = true
-			global.warnUser = false
-			if global.userWarn_timer then killTimer(global.userWarn_timer) global.userWarn_timer = nil end
+			if global.timers.record then if isTimer(global.timers.record) then killTimer(global.timers.record) end global.timers.record = nil end
 			global_data = {}
 			renderRecording()
 			global.step = 1
@@ -300,7 +332,7 @@ function globalCommands(cmd, ...)
 			local health = getElementHealth(vehicle)
 			local nitro = nil
 			if getVehicleUpgradeOnSlot(vehicle, 8) then
-				nitro = {l = _float(getVehicleNitroLevel(vehicle)), r = isVehicleNitroRecharging(vehicle), a = isVehicleNitroActivated(vehicle)}
+				nitro = getVehicleNitroLevel(vehicle)
 			end
 			table_insert(global_warps, 	{
 								p = {_float(x), _float(y), _float(z)},
@@ -309,7 +341,7 @@ function globalCommands(cmd, ...)
 								rv = {_float(rvx), _float(rvy), _float(rvz)},
 								m = model,
 								h = _float(health),
-								n = nitro.l,
+								n = _float(nitro),
 								s = #global_data
 							}
 						)
@@ -317,6 +349,7 @@ function globalCommands(cmd, ...)
 		end
 	-- load (yes, you can actually use this as a save/load warp script without the use of recording)
 	elseif cmd == registered_commands.load_warp then
+		-- aight hear me out, this part was actually really messed up before, now it should work flawlessly, otherwise, burn your pc to ashes
 		if vehicle then
 			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 			if #global_warps == 0 then outputChatBox("[TAS] #FFFFFFLoading warp failed, no data found!", 255, 100, 100, true) return end
@@ -327,7 +360,7 @@ function globalCommands(cmd, ...)
 				removeEventHandler("onClientRender", root, renderRecording)
 				global.step = w_data.s
 				local recorded_cache = {}
-				for i=1, global.step-1 do
+				for i=1, global.step do
 					table_insert(recorded_cache, global_data[i])
 				end
 				global_data = recorded_cache
@@ -341,15 +374,19 @@ function globalCommands(cmd, ...)
 			-- i hate this part so much
 			global.warp_timer = setTimer(function()
 				setElementFrozen(vehicle, false)
-				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3]) -- doing it again just to make sure
-				setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3]) -- doing it again just to make sure
 				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
-				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
-				setVehicleNitroLevel(vehicle, w_data.n)
+				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
+				if getVehicleUpgradeOnSlot(vehicle, 8) then
+					if w_data.n then
+						setVehicleNitroLevel(vehicle, w_data.n)
+					end
+				end
 				if global.recording then
 					if global.settings.sensitiveRecording then renderRecording() end
 					addEventHandler("onClientRender", root, renderRecording)
 				end
+				setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
+				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
 			end, 500, 1)
 			outputChatBox("[TAS] #FFFFFFWarp #ffb43c#"..tostring(#global_warps).." #ffffffloaded!", 255, 180, 60, true)
 		end
@@ -374,7 +411,7 @@ function globalCommands(cmd, ...)
 			if global.playback then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop playbacking!", 255, 100, 100, true) return end
 			if global.recording or global.recording_fbf then outputChatBox("[TAS] #FFFFFFResuming run failed, please stop recording first!", 255, 100, 100, true) return end
 			local recorded_cache = {}
-			for i=1, frame do
+			for i=1, frame do -- I WAS DOING IT ALL RIGHT BEFORE, WHY NOT DO THAT AT THE LOAD WARP PART
 				table_insert(recorded_cache, global_data[i])
 			end
 			global_data = recorded_cache
@@ -387,7 +424,7 @@ function globalCommands(cmd, ...)
 								rv = {w_data.rv[1], w_data.rv[2], w_data.rv[3]},
 								m = w_data.m,
 								h = w_data.h,
-								n = w_data.n.l,
+								n = w_data.n.l or nil, -- untested
 								s = #global_data
 							}
 						)
@@ -404,7 +441,11 @@ function globalCommands(cmd, ...)
 				setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
 				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
 				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
-				setVehicleNitroLevel(vehicle, w_data.n.l)
+				if getVehicleUpgradeOnSlot(vehicle, 8) then
+					if w_data.n and w_data.n.l then
+						setVehicleNitroLevel(vehicle, w_data.n.l)
+					end
+				end
 				if global.recording then
 					if global.settings.sensitiveRecording then renderRecording() end
 					addEventHandler("onClientRender", root, renderRecording)
@@ -437,23 +478,16 @@ function globalCommands(cmd, ...)
 		if args[1] then
 			if #global_data > 0 then
 				local file_name = "saves/"..args[1]..".txt" -- got rid of that mf
-				--if global.warnUser then
-					if fileExists("@"..file_name) then
-						if not global.userOverwriteWarn_timer then
-							global.userOverwriteWarn_timer = setTimer(function() global.userOverwriteWarn_timer = nil end, 5000, 1)
-							outputChatBox("[TAS] #FFFFFFAre you sure you want to overwrite #FF6464'"..file_name.."'#ffffff? Type #FF6464/saver [file] #FFFFFFto continue.", 255, 100, 100, true)
-							return
-						else
-							if global.userOverwriteWarn_timer then
-								if isTimer(global.userOverwriteWarn_timer) then
-									killTimer(global.userOverwriteWarn_timer)
-								end
-								global.userOverwriteWarn_timer = nil
-							end
-							fileDelete("@"..file_name)
-						end
+				if fileExists("@"..file_name) then
+					if global.settings.warnUser and not (global.timers.save and isTimer(global.timers.save)) then
+						global.timers.save = setTimer(function() global.timers.save = nil end, 5000, 1)
+						outputChatBox("[TAS] #FFFFFFAre you sure you want to overwrite #FF6464'"..file_name.."'#ffffff? Type #FF6464/"..registered_commands.save_record.." [file] #FFFFFFto continue.", 255, 100, 100, true)
+						return
+					else
+						if global.timers.save then if isTimer(global.timers.save) then killTimer(global.timers.save) end global.timers.save = nil end
+						fileDelete("@"..file_name)
 					end
-				--end
+				end
 				local file = fileCreate("@"..file_name)
 				if file then
 					--local whole_ass_data = {recording_data = global_data, details = {warps = {}, }} -- still to be worked on
@@ -494,13 +528,37 @@ function globalCommands(cmd, ...)
 		if global.settings.showDebug then
 			global.settings.showDebug = false
 			removeEventHandler("onClientHUDRender", root, renderDebug)
+			removeEventHandler("onClientHUDRender", root, renderPathway)
 			outputChatBox("[TAS] #FFFFFFDebugging is now #FF64FFDISABLED!", 255, 100, 255, true)
 		else
 			global.settings.showDebug = true
 			addEventHandler("onClientHUDRender", root, renderDebug)
+			addEventHandler("onClientHUDRender", root, renderPathway)
 			outputChatBox("[TAS] #FFFFFFDebugging is now #FF64FFENABLED!", 255, 100, 255, true)
 		end
+	
+	-- autotas
+	elseif cmd == registered_commands.autotas then
+		if global.settings.trigger_mapStart then
+			global.settings.trigger_mapStart = false
+			outputChatBox("[TAS] #FFFFFFAuto-TAS is now #FF64FFDISABLED!", 255, 100, 255, true)
+		else
+			global.settings.trigger_mapStart = true
+			outputChatBox("[TAS] #FFFFFFAuto-TAS is now #FF64FFENABLED!", 255, 100, 255, true)
+		end
 		
+	-- clear all
+	elseif cmd == registered_commands.clear_all then
+		if global.recording or global.recording_fbf or global.playbacking then outputChatBox("[TAS] #FFFFFFClearing failed, stop recording or playbacking first!", 255, 100, 100, true) return end
+		if global.settings.warnUser and not (global.settings.clear and isTimer(global.settings.clear)) then
+			global.settings.clear = setTimer(function() global.settings.clear = nil end, 5000, 1)
+			outputChatBox("[TAS] #FFFFFFAre you sure you want to clear all data? Type #FF6464/"..registered_commands.clear_all.." #FFFFFFto continue.", 255, 100, 100, true)
+			return
+		end
+		global.settings.clear = nil
+		global_data = {}
+		global_warps = {}
+		outputChatBox("[TAS] #FFFFFFRecorded data and warps have been cleared!", 255, 100, 255, true)
 		
 	-- tashelp
 	elseif cmd == registered_commands.help then
@@ -513,6 +571,7 @@ function globalCommands(cmd, ...)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.save_warp.." | /"..registered_commands.load_warp.." | /"..registered_commands.delete_warp.." - save | load | delete warp", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFFBACKSPACE - rewind during recording (+L-SHIFT fast rewind | +L-ALT slow rewind)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.load_record.." [file] | /"..registered_commands.save_record.." [file] - load | save record data", 255, 100, 100, true)
+		outputChatBox("[TAS] #FFFFFF/"..registered_commands.autotas.." | /"..registered_commands.clear_all.." - toggle AUTO-TAS | clear all data (including warps)", 255, 100, 100, true)
 		outputChatBox("[TAS] #FFFFFF/"..registered_commands.debug.." - toggle debugging", 255, 100, 100, true)
 	end
 	
@@ -639,14 +698,16 @@ function renderPlaybacking()
 		
 		if getVehicleUpgradeOnSlot(vehicle, 8) then
 			-- this is the part that was left unfixed for a while, it should work fine now cool cool
-			if not data.n.a and data.n.r then
-				setVehicleNitroActivated(vehicle, false)
-			elseif data.n.a and not data.n.r then
-				if not isVehicleNitroActivated(vehicle) then 
-					setVehicleNitroActivated(vehicle, true) 
+			if data.n then -- what, am i dumb? "duud told us it was fixed, shame on him!". the thing is everything was tested on freeroam so there's this reason.. so you can blame me
+				if not data.n.a and data.n.r then
+					setVehicleNitroActivated(vehicle, false)
+				elseif data.n.a and not data.n.r then
+					if not isVehicleNitroActivated(vehicle) then 
+						setVehicleNitroActivated(vehicle, true) 
+					end
 				end
+				if data.n.l then setVehicleNitroLevel(vehicle, data.n.l) end
 			end
-			setVehicleNitroLevel(vehicle, data.n.l)
 		end
 		
 		-- tbh? this could be improved a lot but idk
@@ -707,7 +768,15 @@ function renderPlaybacking()
 			return 
 		end
 		global.step = global.step + 1
-		if global.step > #global_data then global.step = #global_data end
+		if global.step > #global_data then 
+			if global.settings.stopPlaybackFinish then 
+				global.playbacking = false
+				removeEventHandler("onClientRender", root, renderPlaybacking)
+				resetBinds()
+				outputChatBox("[TAS] #FFFFFFPlaybacking ended!", 100, 100, 255, true)
+			end
+			global.step = #global_data
+		end
 		
 	else
 		if global.playbacking then
@@ -727,11 +796,8 @@ end
 
 function renderDebug()
 
-	local displayedFrames = {1, #global_data-1}
-	local frameSkipping = global.settings.frameSkipping
-
 	local rc_stat = "#FF6464FALSE"
-	if global.recording then rc_stat = "#64FF64TRUE" elseif global.recording_fbf then rc_stat = "#64FF64TRUE (Frame-By-Frame)" elseif global.userWarn_timer then rc_stat = "#FFFF64AWAITING STATUS.." end
+	if global.recording then rc_stat = "#64FF64TRUE" elseif global.recording_fbf then rc_stat = "#64FF64TRUE (Frame-By-Frame)" elseif global.timers.record then rc_stat = "#FFFF64AWAITING STATUS.." end
 	if global.rewinding then rc_stat = "#64FF64TRUE #64FFFF(REWINDING..)" end
 	
 	local fps_stat = ""
@@ -744,8 +810,6 @@ function renderDebug()
 	local pb_stat = "#FF6464FALSE"
 	if global.playbacking then 
 		pb_stat = "#64FF64TRUE" 
-		displayedFrames = {global.step-global.settings.displayedFrames.backward, global.step+global.settings.displayedFrames.forward} -- if you're playbacking, preview all frames instead of skipping some of them
-		frameSkipping = 1 
 	end
 	
 	_text("Recording: "..rc_stat.." "..fps_stat, screenW/2-global.dx_settings.offsetH+170, screenH-200, 0, 0, 1, "default", "left", "top", false, false, false, true)
@@ -763,6 +827,18 @@ function renderDebug()
 	drawKey("ᐱ", screenW/2-global.dx_settings.offsetH+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
 	drawKey("ᐯ", screenW/2-global.dx_settings.offsetH+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
 	
+end
+
+function renderPathway()
+
+	local displayedFrames = {1, #global_data-1}
+	local frameSkipping = global.settings.frameSkipping
+	
+	if global.playbacking then
+		displayedFrames = {global.step-global.settings.displayedFrames.backward, global.step+global.settings.displayedFrames.forward} -- if you're playbacking, preview all frames instead of skipping some of them
+		frameSkipping = 1 
+	end
+	
 	-- oh this is the part where the lines are drawn, to make it more performance friendly, just skip some frames if you're not playbacking
 	if global.settings.showPath then -- why even try
 		for i=displayedFrames[1],displayedFrames[2]-frameSkipping-1,frameSkipping do -- wtf is this mess?
@@ -771,6 +847,7 @@ function renderDebug()
 			end
 		end
 	end
+	
 end
 
 function drawKey(keyName, x, y, x2, y2, color) -- draw keys

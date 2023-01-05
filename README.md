@@ -49,6 +49,8 @@ It is a complete remake over the old one. It might have a better overall perform
 BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it up | +Left Alt to slow it down)
 /saver [name] - save the recorded data to a file
 /loadr [name] - load an existing run
+/autotas - toggle Auto-TAS (trigger record or playback on map start)
+/clearall - clear all data
 /debugr - toggle debugging
 ```
 
