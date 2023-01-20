@@ -1,6 +1,6 @@
 <a href='https://lua.org' target="_blank"><img alt='lua' src='https://img.shields.io/badge/mom_i made it in lua-100000?style=plastic&logo=lua&logoColor=white&labelColor=5C5C5C&color=5E56FF'/></a>
 
-## Recording & Seamless Segmenting Run Tool for MTA:SA
+## Recording & Seamless Segmenting Run Tool v1.3 for MTA:SA
 ### by chris1384 @2020
 
 This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstration purposes.
@@ -15,7 +15,8 @@ It is a complete remake over the old one. It might have a better overall perform
 - Frame-By-Frame recording, which locks your position and manually set next and previous frames
 - switching to regular and frame-by-frame recording anytime you want
 - continuing the run starting from the end and seeking the position based on a frame number
-- * automatically starting recording or playbacking on map start
+- automatically starting recording or playbacking on map start
+- automatically saving any data that was left behind (on quit/resource stopping)
 - debugging the run and showing a lot of info about what you're doing
 - saving and loading records
 
@@ -50,8 +51,8 @@ It is a complete remake over the old one. It might have a better overall perform
 BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it up | +Left Alt to slow it down)
 /saver [name] - save the recorded data to a file
 /loadr [name] - load an existing run
-* /autotas - toggle Auto-TAS (trigger record or playback on map start)
-* /clearall - clear all data
+/autotas - toggle Auto-TAS (trigger record or playback on map start)
+/clearall - clear all data
 /debugr - toggle debugging
 ```
 
@@ -78,7 +79,7 @@ Doing this change might give you an unfair advantage and possibly look strange w
 - I've also tested this tool using a low-end laptop I had at my disposal, everything was working smoothly and didn't had any problems with it. If you still get any issues with it, please seek out some ways online on how to clean your PC or even upgrade it.
 
 ## Upcoming features
-- Checkpoints, so you can see where you gain or lose time. You must complete the map from start to finish so you can compare it afterwards. (idea by Geass)
+- ~~Checkpoints, so you can see where you gain or lose time. You must complete the map from start to finish so you can compare it afterwards.~~ (idea by Geass)
 - Slowmotion
 - Pause recording on FPS drops
 - Adding more info (warp data, checkpoints data, frame-by-frame debug lines etc.) into the save files
