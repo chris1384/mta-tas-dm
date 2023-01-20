@@ -21,7 +21,7 @@ local global = 	{
 						
 						-- settings
 						settings = 	{
-										showInfo_resStart = false,
+										showInfo_resStart = true, -- show prompt on resource start
 										
 										trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead (merged into one variable)
 										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking
@@ -53,7 +53,7 @@ local global = 	{
 										clear = nil -- warn for clearing all data
 									},
 									
-						save_draft = nil,
+						save_draft = nil, -- used for unsaved data
 					}
 					
 -- Registered commands (edit to your liking)
@@ -166,20 +166,24 @@ addEventHandler("onClientResourceStart", resourceRoot, function()
 	
 end)
 
--- Initializing
-addEventHandler("onClientResourceStop", resourceRoot, function()
+-- Save unsaved data
+function onStop()
 
 	if #global_data > 0 then
 		if global.save_draft then return end
-		local file = fileCreate("@draft/"..tostring(os.date())..".txt")
+		local name = tostring(os.date())..".txt"
+		local file = fileCreate("@draft/"..name)
 		if file then
 			fileWrite(file, toJSON(global_data))
 			fileClose(file)
+			outputChatBox("[TAS] Unsaved data file has been created using the name: "..name)
 		end
 		
 	end
 	
-end)
+end
+addEventHandler("onClientPlayerQuit", localPlayer, onStop)
+addEventHandler("onClientResourceStop", resourceRoot, onStop)
 
 -- Registering custom events
 addEvent("tas:triggerCommand", true)
