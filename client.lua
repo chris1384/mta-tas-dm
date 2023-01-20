@@ -21,6 +21,8 @@ local global = 	{
 						
 						-- settings
 						settings = 	{
+										showInfo_resStart = false,
+										
 										trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead (merged into one variable)
 										stopPlaybackFinish = false, -- prevent freezing the position on last frame of playbacking
 										showDebug = false, -- show debugging info (also works on script start)
@@ -50,6 +52,8 @@ local global = 	{
 										save = nil, -- warn for overwriting
 										clear = nil -- warn for clearing all data
 									},
+									
+						save_draft = nil,
 					}
 					
 -- Registered commands (edit to your liking)
@@ -142,8 +146,10 @@ local dxDrawText = dxDrawText
 -- Initializing
 addEventHandler("onClientResourceStart", resourceRoot, function()
 
-	outputChatBox("[TAS] #FFFFFFRecording Tool by #FFAAFFchris1384 #FFFFFFhas started!", 255, 100, 100, true)
-	outputChatBox("[TAS] #FFFFFFType #FF6464/"..registered_commands.help.." #FFFFFFfor commands!", 255, 100, 100, true)
+	if global.settings.showInfo_resStart then
+		outputChatBox("[TAS] #FFFFFFRecording Tool by #FFAAFFchris1384 #FFFFFFhas started!", 255, 100, 100, true)
+		outputChatBox("[TAS] #FFFFFFType #FF6464/"..registered_commands.help.." #FFFFFFfor commands!", 255, 100, 100, true)
+	end
 	
 	for _,v in pairs(registered_commands) do
 		addCommandHandler(v, globalCommands)
@@ -156,6 +162,21 @@ addEventHandler("onClientResourceStart", resourceRoot, function()
 	if global.settings.showDebug then
 		addEventHandler("onClientHUDRender", root, renderDebug)
 		addEventHandler("onClientHUDRender", root, renderPathway)
+	end
+	
+end)
+
+-- Initializing
+addEventHandler("onClientResourceStop", resourceRoot, function()
+
+	if #global_data > 0 then
+		if global.save_draft then return end
+		local file = fileCreate("@draft/"..tostring(os.date())..".txt")
+		if file then
+			fileWrite(file, toJSON(global_data))
+			fileClose(file)
+		end
+		
 	end
 	
 end)
@@ -209,6 +230,7 @@ function globalCommands(cmd, ...)
 				return
 			end
 			global.recording = true
+			global.save_draft = nil
 			if global.timers.record then if isTimer(global.timers.record) then killTimer(global.timers.record) end global.timers.record = nil end
 			global_data = {}
 			global.recorded_fps = getFPSLimit()
@@ -243,6 +265,7 @@ function globalCommands(cmd, ...)
 				outputChatBox("[TAS] #FFFFFFRegular recording enabled, switching to frame-by-frame!", 255, 100, 100, true)
 			end
 			global.recording_fbf = true
+			global.save_draft = nil
 			if global.timers.record then if isTimer(global.timers.record) then killTimer(global.timers.record) end global.timers.record = nil end
 			global_data = {}
 			renderRecording()
@@ -321,6 +344,7 @@ function globalCommands(cmd, ...)
 	-- warps
 	-- save
 	elseif cmd == registered_commands.save_warp then
+		--if isCursorShowing() then return end -- you might want this to happen
 		if vehicle then
 			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 
@@ -331,8 +355,8 @@ function globalCommands(cmd, ...)
 			local model = getElementModel(vehicle)
 			local health = getElementHealth(vehicle)
 			local nitro = nil
-			if getVehicleUpgradeOnSlot(vehicle, 8) then
-				nitro = getVehicleNitroLevel(vehicle)
+			if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
+				nitro = {l = _float(getVehicleNitroLevel(vehicle)), r = isVehicleNitroRecharging(vehicle), a = isVehicleNitroActivated(vehicle)}
 			end
 			table_insert(global_warps, 	{
 								p = {_float(x), _float(y), _float(z)},
@@ -341,7 +365,7 @@ function globalCommands(cmd, ...)
 								rv = {_float(rvx), _float(rvy), _float(rvz)},
 								m = model,
 								h = _float(health),
-								n = _float(nitro),
+								n = nitro or nil,
 								s = #global_data
 							}
 						)
@@ -350,6 +374,7 @@ function globalCommands(cmd, ...)
 	-- load (yes, you can actually use this as a save/load warp script without the use of recording)
 	elseif cmd == registered_commands.load_warp then
 		-- aight hear me out, this part was actually really messed up before, now it should work flawlessly, otherwise, burn your pc to ashes
+		if isCursorShowing() then return end
 		if vehicle then
 			if isPedDead(localPlayer) or getVehicleController(vehicle) ~= localPlayer then return end
 			if #global_warps == 0 then outputChatBox("[TAS] #FFFFFFLoading warp failed, no data found!", 255, 100, 100, true) return end
@@ -376,10 +401,19 @@ function globalCommands(cmd, ...)
 				setElementFrozen(vehicle, false)
 				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
 				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
-				if getVehicleUpgradeOnSlot(vehicle, 8) then
-					if w_data.n then
-						setVehicleNitroLevel(vehicle, w_data.n)
+				iprint(w_data.n)
+				if w_data.n then
+					if not getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then addVehicleUpgrade(vehicle, 1010) end
+					if not w_data.n.a and w_data.n.r then
+						setVehicleNitroActivated(vehicle, false)
+					elseif w_data.n.a and not w_data.n.r then
+						if not isVehicleNitroActivated(vehicle) then 
+							setVehicleNitroActivated(vehicle, true) 
+						end
 					end
+					if w_data.n.l then setVehicleNitroLevel(vehicle, w_data.n.l) end
+				else
+					if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then removeVehicleUpgrade(vehicle, 1010) end
 				end
 				if global.recording then
 					if global.settings.sensitiveRecording then renderRecording() end
@@ -392,6 +426,7 @@ function globalCommands(cmd, ...)
 		end
 	-- delete
 	elseif cmd == registered_commands.delete_warp then
+		if isCursorShowing() then return end
 		if #global_warps == 1 then outputChatBox("[TAS] #FFFFFFWarp #1 cannot be deleted!", 255, 100, 100, true) return end
 		table_remove(global_warps, #global_warps)
 		outputChatBox("[TAS] #FFFFFFWarp #ff3232#"..tostring(#global_warps).." #ffffffdeleted!", 255, 50, 50, true)
@@ -416,6 +451,7 @@ function globalCommands(cmd, ...)
 			end
 			global_data = recorded_cache
 			global.recording = true
+			global.save_draft = nil
 			local w_data = global_data[#global_data]
 			table_insert(global_warps, 	{
 								p = {w_data.p[1], w_data.p[2], w_data.p[3]},
@@ -424,7 +460,7 @@ function globalCommands(cmd, ...)
 								rv = {w_data.rv[1], w_data.rv[2], w_data.rv[3]},
 								m = w_data.m,
 								h = w_data.h,
-								n = w_data.n.l or nil, -- untested
+								n = w_data.n or nil, -- untested
 								s = #global_data
 							}
 						)
@@ -441,15 +477,21 @@ function globalCommands(cmd, ...)
 				setElementRotation(vehicle, w_data.r[1], w_data.r[2], w_data.r[3])
 				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
 				setElementAngularVelocity(vehicle, w_data.rv[1], w_data.rv[2], w_data.rv[3])
-				if getVehicleUpgradeOnSlot(vehicle, 8) then
-					if w_data.n and w_data.n.l then
-						setVehicleNitroLevel(vehicle, w_data.n.l)
+				if w_data.n then
+					if not getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then addVehicleUpgrade(vehicle, 1010) end
+					if not w_data.n.a and w_data.n.r then
+						setVehicleNitroActivated(vehicle, false)
+					elseif w_data.n.a and not w_data.n.r then
+						if not isVehicleNitroActivated(vehicle) then 
+							setVehicleNitroActivated(vehicle, true) 
+						end
 					end
+					if w_data.n.l then setVehicleNitroLevel(vehicle, w_data.n.l) end
+				else
+					if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then removeVehicleUpgrade(vehicle, 1010) end
 				end
-				if global.recording then
-					if global.settings.sensitiveRecording then renderRecording() end
-					addEventHandler("onClientRender", root, renderRecording)
-				end
+				if global.settings.sensitiveRecording then renderRecording() end
+				addEventHandler("onClientRender", root, renderRecording)
 			end, 500, 1)
 			outputChatBox("[TAS] #FFFFFFRun resumed from frame #64ff64#"..tostring(frame).." #ffffff! Recording frames..", 100, 255, 100, true)
 			outputChatBox("[TAS] #FFFFFFSaved warp as #3cb4ff#"..tostring(#global_warps).." #ffffff!", 60, 180, 255, true)
@@ -493,6 +535,7 @@ function globalCommands(cmd, ...)
 					--local whole_ass_data = {recording_data = global_data, details = {warps = {}, }} -- still to be worked on
 					fileWrite(file, toJSON(global_data))
 					fileClose(file)
+					global.save_draft = file_name
 					outputChatBox("[TAS] #FFFFFFSaved file as #FFFF64"..file_name.."#ffffff!", 255, 255, 100, true)
 				end
 			end
@@ -517,6 +560,7 @@ function globalCommands(cmd, ...)
 			end
 			if success then
 				outputChatBox("[TAS] #FFFFFFLoaded file #FFFF64"..file_name.."#ffffff with #FFFF64#"..tostring(#global_data).."#ffffff frames, ready for use!", 255, 255, 100, true)
+				global.save_draft = file_name
 			else
 				outputChatBox("[TAS] #FFFFFFLoading file failed, it does not exist or it has invalid data!", 255, 100, 100, true)
 			end
@@ -632,7 +676,7 @@ function renderRecording()
 			local model = getElementModel(vehicle)
 			local health = getElementHealth(vehicle)
 			local nitro = nil -- changed this one to nil, just to save some space
-			if getVehicleUpgradeOnSlot(vehicle, 8) then
+			if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
 				nitro = {l = _float(getVehicleNitroLevel(vehicle)), r = isVehicleNitroRecharging(vehicle), a = isVehicleNitroActivated(vehicle)}
 			end
 			local keys = {}
@@ -696,7 +740,7 @@ function renderPlaybacking()
 		if getElementModel(vehicle) ~= data.m then setElementModel(vehicle, data.m) end -- is it really doing it better or something?
 		setElementHealth(vehicle, data.h)
 		
-		if getVehicleUpgradeOnSlot(vehicle, 8) then
+		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
 			-- this is the part that was left unfixed for a while, it should work fine now cool cool
 			if data.n then -- what, am i dumb? "duud told us it was fixed, shame on him!". the thing is everything was tested on freeroam so there's this reason.. so you can blame me
 				if not data.n.a and data.n.r then
