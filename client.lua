@@ -405,7 +405,6 @@ function globalCommands(cmd, ...)
 				setElementFrozen(vehicle, false)
 				setElementVelocity(vehicle, w_data.v[1], w_data.v[2], w_data.v[3])
 				setElementPosition(vehicle, w_data.p[1], w_data.p[2], w_data.p[3])
-				iprint(w_data.n)
 				if w_data.n then
 					if not getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then addVehicleUpgrade(vehicle, 1010) end
 					if not w_data.n.a and w_data.n.r then
