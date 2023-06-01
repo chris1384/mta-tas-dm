@@ -24,8 +24,10 @@ local tas = {
 				data = {},
 				
 				settings = 	{
-								startPrompt = true -- show resource initialization text on startup
-								promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers) -- unused
+								startPrompt = true, -- show resource initialization text on startup
+								promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
+								
+								stopPlaybackFinish = true, -- prevent freezing the position on last frame of playbacking
 							},
 				timers = {},
 			}
@@ -129,6 +131,12 @@ function tas.init()
 end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
 
+-- // Termination
+function tas.stop()
+	tas.resetBinds()
+end
+addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
+
 
 -- // Event Commands
 function tas.commands(cmd, ...) 
@@ -219,13 +227,8 @@ function tas.render_playback()
 	if vehicle and getVehicleController(vehicle) == localPlayer then
 	
 		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.start_tick)
+		local real_time = (current_tick - tas.var.start_tick) -- /100 -- inbetweening testing
 		local inbetweening = 0
-		
-		dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
-		dxDrawText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
-		dxDrawText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
-		dxDrawText("Inbetween: "..tostring(inbetweening), 600, 160, 0, 0)
 
 		if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
 			while real_time > tas.data[tas.var.play_frame].tick do
@@ -234,12 +237,21 @@ function tas.render_playback()
 					tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
 					tas.var.play_frame = tas.var.play_frame + 1
 				else
+					if tas.settings.stopPlaybackFinish then
+						executeCommandHandler(registered_commands.playback)
+						return
+					end
 					break
 				end
 			end
 		end
 		
 		inbetweening = math_max(0, math_min((real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1))
+		
+		dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
+		dxDrawText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
+		dxDrawText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
+		dxDrawText("Inbetween: "..tostring(inbetweening), 600, 160, 0, 0)
 		
 		local frame_data = tas.data[tas.var.play_frame]
 		local frame_data_next = tas.data[tas.var.play_frame+1]
