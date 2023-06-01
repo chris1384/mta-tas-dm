@@ -1,6 +1,6 @@
 <a href='https://lua.org' target="_blank"><img alt='lua' src='https://img.shields.io/badge/mom_i made it in lua-100000?style=plastic&logo=lua&logoColor=white&labelColor=5C5C5C&color=5E56FF'/></a>
 
-## Recording & Seamless Segmenting Run Tool v1.3 for MTA:SA
+## Recording & Seamless Segmenting Run Tool v1.4 for MTA:SA
 ### by chris1384 @2020
 
 This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstration purposes.
