@@ -32,9 +32,21 @@ local tas = {
 								startPrompt = true, -- show resource initialization text on startup
 								promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 								
-								stopPlaybackFinish = true, -- prevent freezing the position on last frame of playbacking
+								captureFramerate = false, 
+								--[[	specify the tick target you'd want to record your run, low values might be efficient for saving but can cause jittery playbacking. this should be considered as experimental.
+										please use values in miliseconds :: 1000 / FRAMERATE;
+										e.g. 1000 / 51
+										set to 'false' to disable it
+								]]
+								
+								stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 								
 								warpResume = 500, -- time until the vehicle resumes from loading a warp
+								
+								keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
+								saveWarpData = true, -- save warp data to .tas files
+								
+								playbackSpeed = 1, -- change playback speed
 								debugging = false, -- show debug info
 							},
 				timers = {},
@@ -128,6 +140,9 @@ local math_floor = math.floor
 -- // Other
 local table_insert = table.insert
 local table_remove = table.remove
+local table_concat = table.concat
+local string_find = string.find
+local string_sub = string.sub
 local string_gsub = string.gsub
 local string_format = string.format
 
@@ -173,14 +188,20 @@ function tas.commands(cmd, ...)
 			
 			removeEventHandler("onClientRender", root, tas.render_record)
 			tas.var.recording = false
+			
 			tas.prompt("[TAS] ##Recording stopped! ($$"..tostring(#tas.data).." ##frames)", 100, 255, 100)
 		else
 			tas.data = {}
-			tas.warps = {}
+			
+			if tas.settings.keepWarpData ~= true then
+				tas.warps = {}
+			end
+			
 			tas.var.recording = true
 			tas.var.start_tick = getTickCount()
 			tas.var.difference_tick = 0
 			addEventHandler("onClientRender", root, tas.render_record)
+			
 			tas.prompt("[TAS] ##Recording frames..", 100, 255, 100)
 		end
 		
@@ -194,12 +215,14 @@ function tas.commands(cmd, ...)
 			removeEventHandler("onClientHUDRender", root, tas.render_playback)
 			tas.var.playbacking = false
 			tas.resetBinds()
+			
 			tas.prompt("[TAS] ##Playbacking stopped!", 100, 100, 255)
 		else
 			addEventHandler("onClientHUDRender", root, tas.render_playback)
 			tas.var.playbacking = true
 			tas.var.play_frame = 1
 			tas.var.start_tick = getTickCount()
+			
 			tas.prompt("[TAS] ##Playbacking started!", 100, 100, 255)
 		end
 	
@@ -292,9 +315,181 @@ function tas.commands(cmd, ...)
 		table_remove(tas.warps, last_warp)
 		tas.prompt("[TAS] ##Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
 		
+	-- // Save Recording
+	elseif cmd == tas.registered_commands.save_record then
+	
+		-- FORMAT (for nerds):
+		-- +run
+		-- tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or 0|keys
+		-- -run
+		
+		-- +warps
+		-- frame|tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or 0
+		-- -warps
+									
+		if args[1] == nil then 
+			tas.prompt("[TAS] ##Saving failed, please specify a $$name ##for your file!", 255, 100, 100) 
+			tas.prompt("[TAS] ##Example: $$/"..tas.registered_commands.save_record.." bbw", 255, 100, 100) 
+			return 
+		end
+		if #tas.data == 0 then tas.prompt("[TAS] ##Saving failed, no $$data ##recorded!", 255, 100, 100) return end
+		
+		--if fileExists("@saves/"..args[1]..".tas") then fileDelete("@saves/"..args[1]..".tas") end
+		if fileExists("@saves/"..args[1]..".tas") then tas.prompt("[TAS] ##Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
+		
+		local save_file = fileCreate("@saves/"..args[1]..".tas")
+		if save_file then
+		
+			-- // Header
+			fileWrite(save_file, "# "..args[1]..".tas file created on "..os.date().."\n")
+			fileWrite(save_file, "# Author: "..string_gsub(getPlayerName(localPlayer), "#%x%x%x%x%x%x", "").." | Frames: "..tostring(#tas.data).." | Warps: "..tostring(#tas.warps).."\n\n")
+			-- //
+			
+			-- // Recording part
+			fileWrite(save_file, "+run\n")
+			
+			for i=1, #tas.data do
+			
+				local run = tas.data[i]
+				local nos = "-1"
+				
+				if run.n ~= nil then
+					local active = ((run.n.a == true) and "1") or "0"
+					nos = tostring(run.n.c)..","..tostring(tas.float(run.n.l))..",".. active
+				end
+				
+				fileWrite(save_file, string_format("%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s|%s", run.tick, run.p[1], run.p[2], run.p[3], run.r[1], run.r[2], run.r[3], run.v[1], run.v[2], run.v[3], tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, table_concat(run.k, ",")).."\n")
+			end
+			
+			fileWrite(save_file, "-run\n")
+			-- //
+			
+			-- // Warps part
+			if #tas.warps > 0 and tas.settings.saveWarpData then
+				fileWrite(save_file, "+warps\n")
+				for i=1, #tas.warps do
+				
+					local warp = tas.warps[i]
+					local nos = "-1"
+					
+					if warp.n ~= nil then
+						local active = ((warp.n.a == true) and "1") or "0"
+						nos = tostring(warp.n.c)..","..tostring(tas.float(warp.n.l))..",".. active
+					end
+					
+					fileWrite(save_file, string_format("%d|%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s", warp.frame, warp.tick, warp.p[1], warp.p[2], warp.p[3], warp.r[1], warp.r[2], warp.r[3], warp.v[1], warp.v[2], warp.v[3], tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+				end
+				fileWrite(save_file, "-warps")
+			end
+			-- //
+			
+			fileClose(save_file)
+			
+			tas.prompt("[TAS] ##Your run has been saved to 'saves/"..args[1]..".tas'", 255, 255, 100)
+		end
+	
+	-- // Load Recording
+	elseif cmd == tas.registered_commands.load_record then
+	
+		if args[1] == nil then 
+			tas.prompt("[TAS] ##Loading record failed, please specify the $$name ##of your file!", 255, 100, 100) 
+			tas.prompt("[TAS] ##Example: $$/"..tas.registered_commands.load_record.." od3", 255, 100, 100) 
+			return 
+		end
+		
+		local load_file = (fileExists("@saves/"..args[1]..".tas") == true and fileOpen("@saves/"..args[1]..".tas")) or false
+		
+		if load_file then
+		
+			local file_size = fileGetSize(load_file)
+			local file_data = fileRead(load_file, file_size)
+			
+			-- // Recording part
+			local run_lines = tas.ambatublou(file_data, "+run", "-run")
+			
+			if run_lines then
+				local run_data = split(run_lines, "\n")
+				
+				if run_data and type(run_data) == "table" and #run_data > 1 then
+				
+					tas.data = {}
+					
+					for i=1, #run_data do
+					
+						local att = split(run_data[i], "|")
+						
+						local p = {loadstring("return "..att[2])()}
+						local r = {loadstring("return "..att[3])()}
+						local v = {loadstring("return "..att[4])()}
+						local rv = {loadstring("return "..att[5])()}
+						
+						local n = {}
+						
+						local nos_returns = {loadstring("return "..att[8])()}
+						if #nos_returns > 1 then 
+							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
+						else
+							n = nil
+						end
+						
+						table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = att[9]})
+					end
+				
+				end
+			end
+			-- //
+			
+			-- // Warps part
+			local warp_lines = tas.ambatublou(file_data, "+warps", "-warps")
+			
+			if warp_lines then
+				local warp_data = split(warp_lines, "\n")
+				if warp_data and type(warp_data) == "table" and #warp_data > 1 then
+				
+					tas.warps = {}
+					
+					for i=1, #warp_data do
+					
+						local att = split(warp_data[i], "|")
+						
+						local p = {loadstring("return "..att[3])()}
+						local r = {loadstring("return "..att[4])()}
+						local v = {loadstring("return "..att[5])()}
+						local rv = {loadstring("return "..att[6])()}
+						
+						local n = {}
+						
+						local nos_returns = {loadstring("return "..att[9])()}
+						if #nos_returns > 1 then 
+							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
+						else
+							n = nil
+						end
+						
+						table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
+						
+					end
+				end
+			end
+			-- //
+			
+			fileClose(load_file)
+			
+			tas.prompt("[TAS] ##File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
+			
+		else
+		
+			tas.prompt("[TAS] ##Loading record failed, file does not $$exist##!", 255, 100, 100) 
+			return
+			
+		end
+	
+	
+	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
-		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your recording", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." - ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
 	end
 end
 
@@ -307,6 +502,10 @@ function tas.render_record()
 	
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
 		
+		if tas.data[#tas.data - 1] then
+			if tas.settings.captureFramerate and (tas.data[#tas.data - 1].tick + tas.settings.captureFramerate) > tick then return end
+		end
+		
 		table_insert(tas.data, 	{
 									tick = tick,
 									p = p,
@@ -318,6 +517,13 @@ function tas.render_record()
 									n = nos,
 									k = keys,
 								})
+	
+	else
+	
+		removeEventHandler("onClientRender", root, tas.render_record)
+		tas.var.recording = false
+		
+		tas.prompt("[TAS] ##Recording stopped due to an error! ($$"..tostring(#tas.data).." ##frames)", 255, 100, 100)
 					
 	end
 end
@@ -363,10 +569,10 @@ function tas.render_playback()
 
 	local vehicle = getControlledVehicle(localPlayer)
 	
-	if vehicle then
+	if vehicle and not isPedDead(localPlayer) then
 	
 		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.start_tick) -- /20 -- inbetweening testing
+		local real_time = (current_tick - tas.var.start_tick) * tas.settings.playbackSpeed
 		local inbetweening = 0
 
 		if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
@@ -385,7 +591,7 @@ function tas.render_playback()
 			end
 		end
 		
-		inbetweening = math_max(0, math_min((real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1))
+		inbetweening = tas.clamp(0, (real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1)
 		
 		if tas.settings.debugging then
 			dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
@@ -426,7 +632,15 @@ function tas.render_playback()
 				end
 			end
 		end
+	
+	else
 		
+		removeEventHandler("onClientHUDRender", root, tas.render_playback)
+		tas.var.playbacking = false
+		tas.resetBinds()
+		
+		tas.prompt("[TAS] ##Playbacking stopped due to an error!", 255, 100, 100)
+			
 	end
 end
 
@@ -439,6 +653,7 @@ end
 
 -- // Command messages
 function tas.prompt(text, r, g, b)
+	if type(text) ~= "string" then return end
 	return outputChatBox(string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string.format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
 end
 
@@ -447,7 +662,12 @@ function tas.lerp(a, b, t)
 	return a + t * (b - a)
 end
 
--- thanks chatgpt XD (CsaWee knows)
+-- // Keep value between min and max
+function tas.clamp(st, v, fn)
+	return math_max(st, math_min(v, fn))
+end
+
+-- // thanks chatgpt XD (CsaWee knows)
 function tas.lerp_angle(start_angle, end_angle, progress)
     local start_angle = math_rad(start_angle)
     local end_angle = math_rad(end_angle)
@@ -490,8 +710,16 @@ function getControlledVehicle(player)
 	return false
 end
 
---[[ -- unused
-function tas.float(number)
-	return math_floor( number * 1000 ) * 0.01
+-- // Split by 2 strings
+function tas.ambatublou(str, st, nd)
+	local _, starter = string_find(str, st)
+	local ender = string_find(str, nd)
+	if starter and ender then
+		return string_sub(str, starter+1, ender-1)
+	end
 end
-]]
+
+-- // Used for efficient saving
+function tas.float(number)
+	return math_floor( number * 1000 ) * 0.001
+end
