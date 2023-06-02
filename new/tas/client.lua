@@ -41,7 +41,7 @@ local tas = {
 			}
 			
 -- // Registered commands (edit to your liking)
-local tas.registered_commands = {	
+tas.registered_commands = {	
 								record = "record",
 								record_frame = "recordf",
 								playback = "playback",
@@ -62,7 +62,7 @@ local tas.registered_commands = {
 							}
 
 -- // Registered keys
-local tas.registered_keys = {
+tas.registered_keys = {
 							w = "accelerate", 
 							a = "vehicle_left",
 							s = "brake_reverse",
@@ -134,6 +134,7 @@ local string_format = string.format
 
 -- // Initialization
 function tas.init()
+
 	if tas.settings.startPrompt then
 		tas.prompt("[TAS] ##Recording Tool $$v1.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
 		tas.prompt("[TAS] ##Type $$/tashelp ##for commands!", 255, 100, 100)
@@ -142,8 +143,6 @@ function tas.init()
 	for _,v in pairs(tas.registered_commands) do
 		addCommandHandler(v, tas.commands)
 	end
-	
-	addEventHandler("onClientHUDRender", root, tas.render_debug)
 	
 end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
@@ -177,6 +176,7 @@ function tas.commands(cmd, ...)
 			tas.prompt("[TAS] ##Recording stopped! ($$"..tostring(#tas.data).." ##frames)", 100, 255, 100)
 		else
 			tas.data = {}
+			tas.warps = {}
 			tas.var.recording = true
 			tas.var.start_tick = getTickCount()
 			tas.var.difference_tick = 0
@@ -292,6 +292,9 @@ function tas.commands(cmd, ...)
 		table_remove(tas.warps, last_warp)
 		tas.prompt("[TAS] ##Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
 		
+	elseif cmd == tas.registered_commands.help then
+		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your recording", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." - ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
 	end
 end
 
