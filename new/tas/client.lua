@@ -432,10 +432,20 @@ function tas.commands(cmd, ...)
 							n = nil
 						end
 						
-						table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = att[9]})
+						local keys
+						if att[9] then
+							keys = split(att[9], ",")
+						end
+						
+						table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = keys})
+						
+						p, r, v, rv, nos_returns = nil, nil, nil, nil, nil
+						
+						att = nil
 					end
-				
+					run_data = nil
 				end
+				run_lines = nil
 			end
 			-- //
 			
@@ -468,8 +478,14 @@ function tas.commands(cmd, ...)
 						
 						table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
 						
+						p, r, v, rv, nos_returns = nil, nil, nil, nil, nil
+						
+						att = nil
 					end
+					
+					warp_data = nil
 				end
+				warp_lines = nil
 			end
 			-- //
 			
@@ -487,6 +503,7 @@ function tas.commands(cmd, ...)
 	
 	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
+		tas.prompt("[TAS] ##Commands List:", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
@@ -625,10 +642,12 @@ function tas.render_playback()
 		tas.nos(vehicle, frame_data.n)
 		
 		tas.resetBinds()
-		for k,v in pairs(tas.registered_keys) do
-			for _,h in ipairs(frame_data.k) do
-				if k == h then
-					setPedControlState(localPlayer, v, true)
+		if frame_data.k then
+			for k,v in pairs(tas.registered_keys) do
+				for _,h in ipairs(frame_data.k) do
+					if k == h then
+						setPedControlState(localPlayer, v, true)
+					end
 				end
 			end
 		end
