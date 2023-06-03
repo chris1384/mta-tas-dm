@@ -69,20 +69,4 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
 
-***Why is the NOS always running out? Shouldn't I get full nitrous when loading a warp?***
-- This is not how it's supposed to work. Depending on the map, nitrous pickups might not be available everytime so you should play it without that benefit.
-Doing this change might give you an unfair advantage and possibly look strange while playbacking, because you will be getting speed (or full NOS level) from nothing.
-
-***Why is the tool lagging so much? Will be there any optimization in the future?***
-- Again, this depends on the users PC specs and what the user or PC is doing at that time. Having a lot of apps in the background may cause frame drops or general performance issues, this in fact could ruin your recording or preview of the run, making it look choppy or even slowing it down.
-- Optimization is also one of my main missions while developing this tool. I'm currently trying to figure out which parts of the code can be optimized without losing any of the features it contains.
-- I've also tested this tool using a low-end laptop I had at my disposal, everything was working smoothly and didn't had any problems with it. If you still get any issues with it, please seek out some ways online on how to clean your PC or even upgrade it.
-
-## Upcoming features
-- ~~Checkpoints, so you can see where you gain or lose time. You must complete the map from start to finish so you can compare it afterwards.~~ (idea by Geass)
-- Slowmotion
-- Pause recording on FPS drops
-- Adding more info (warp data, checkpoints data, frame-by-frame debug lines etc.) into the save files
-- Maybe some ghost peds/vehicles
-
 ## For any help, please contact me on Discord: *chrisu#9616* or on MTA:SA forums (chris1384).
