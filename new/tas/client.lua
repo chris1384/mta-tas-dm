@@ -24,9 +24,9 @@ local tas = {
 							playbacking = false,
 						},
 						
-				data = {},
-				warps = {},
-				entities = {},
+				data = {}, -- run data
+				warps = {}, -- warps
+				entities = {}, -- unused
 				
 				settings = 	{
 								startPrompt = true, -- show resource initialization text on startup
@@ -39,6 +39,7 @@ local tas = {
 										set to 'false' to disable it
 								]]
 								
+								trigger_mapStart = false, -- autotas switch, start recording on map start. if there's data found, switch to automatic playback instead
 								stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 								
 								warpResume = 500, -- time until the vehicle resumes from loading a warp
@@ -47,9 +48,11 @@ local tas = {
 								saveWarpData = true, -- save warp data to .tas files
 								
 								playbackSpeed = 1, -- change playback speed
+								playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
+								
 								debugging = false, -- show debug info
 							},
-				timers = {},
+				timers = {}, -- warp load, warning timers etc.
 			}
 			
 -- // Registered commands (edit to your liking)
@@ -168,13 +171,34 @@ function tas.stop()
 end
 addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
 
+-- // Custom Race Events
+function tas.raceWrap(event)
+	iprint(source, event)
+	if not tas.settings.trigger_mapStart then return end
+	if event == "Started" then
+		if tas.var.recording or tas.var.playbacking then return end
+		if #tas.data > 0 then
+			executeCommandHandler(tas.registered_commands.playback)
+		else
+			executeCommandHandler(tas.registered_commands.record)
+		end
+	elseif event == "Stop" then
+		if tas.var.recording then
+			executeCommandHandler(tas.registered_commands.record)
+		elseif tas.var.playbacking then
+			executeCommandHandler(tas.registered_commands.playback)
+		end
+	end
+end
+addEvent("tas:triggerCommand", true)
+addEventHandler("tas:triggerCommand", root, tas.raceWrap)
 
 -- // Event Commands
 function tas.commands(cmd, ...) 
 
 	local args = {...}
 	
-	local vehicle = getControlledVehicle(localPlayer)
+	local vehicle = tas.cveh(localPlayer)
 	
 	-- // Record
 	if cmd == tas.registered_commands.record then
@@ -212,13 +236,13 @@ function tas.commands(cmd, ...)
 		if tas.var.recording then tas.prompt("[TAS] ##Playbacking failed, stop $$recording ##first!", 255, 100, 100) return end
 		
 		if tas.var.playbacking then
-			removeEventHandler("onClientHUDRender", root, tas.render_playback)
+			removeEventHandler("onClientRender", root, tas.render_playback)
 			tas.var.playbacking = false
 			tas.resetBinds()
 			
 			tas.prompt("[TAS] ##Playbacking stopped!", 100, 100, 255)
 		else
-			addEventHandler("onClientHUDRender", root, tas.render_playback)
+			addEventHandler("onClientRender", root, tas.render_playback)
 			tas.var.playbacking = true
 			tas.var.play_frame = 1
 			tas.var.start_tick = getTickCount()
@@ -320,11 +344,11 @@ function tas.commands(cmd, ...)
 	
 		-- FORMAT (for nerds):
 		-- +run
-		-- tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or 0|keys
+		-- tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or -1|keys
 		-- -run
 		
 		-- +warps
-		-- frame|tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or 0
+		-- frame|tick|x,y,z|rx,ry,rz|vx,vy,vz|rvx,rvy,rvz|health|model|c,l,a or -1
 		-- -warps
 									
 		if args[1] == nil then 
@@ -418,14 +442,30 @@ function tas.commands(cmd, ...)
 					
 						local att = split(run_data[i], "|")
 						
+						--[[
 						local p = {loadstring("return "..att[2])()}
 						local r = {loadstring("return "..att[3])()}
 						local v = {loadstring("return "..att[4])()}
 						local rv = {loadstring("return "..att[5])()}
+						]]
+						
+						local p = split(att[2], ",") 
+						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
+						
+						local r = split(att[3], ",") 
+						r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
+						
+						local v = split(att[4], ",") 
+						v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
+						
+						local rv = split(att[5], ",") 
+						rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
 						
 						local n = {}
 						
-						local nos_returns = {loadstring("return "..att[8])()}
+						local nos_returns = split(att[8], ",")
+						nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
+						
 						if #nos_returns > 1 then 
 							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
 						else
@@ -439,13 +479,8 @@ function tas.commands(cmd, ...)
 						
 						table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = keys})
 						
-						p, r, v, rv, nos_returns = nil, nil, nil, nil, nil
-						
-						att = nil
 					end
-					run_data = nil
 				end
-				run_lines = nil
 			end
 			-- //
 			
@@ -462,14 +497,30 @@ function tas.commands(cmd, ...)
 					
 						local att = split(warp_data[i], "|")
 						
+						--[[
 						local p = {loadstring("return "..att[3])()}
 						local r = {loadstring("return "..att[4])()}
 						local v = {loadstring("return "..att[5])()}
 						local rv = {loadstring("return "..att[6])()}
+						]]
+						
+						local p = split(att[3], ",") 
+						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
+						
+						local r = split(att[4], ",") 
+						r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
+						
+						local v = split(att[5], ",") 
+						v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
+						
+						local rv = split(att[6], ",") 
+						rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
 						
 						local n = {}
 						
-						local nos_returns = {loadstring("return "..att[9])()}
+						local nos_returns = split(att[9], ",")
+						nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
+						
 						if #nos_returns > 1 then 
 							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
 						else
@@ -477,15 +528,9 @@ function tas.commands(cmd, ...)
 						end
 						
 						table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
-						
-						p, r, v, rv, nos_returns = nil, nil, nil, nil, nil
-						
-						att = nil
 					end
 					
-					warp_data = nil
 				end
-				warp_lines = nil
 			end
 			-- //
 			
@@ -500,7 +545,23 @@ function tas.commands(cmd, ...)
 			
 		end
 	
+	-- // Auto-TAS
+	elseif cmd == tas.registered_commands.autotas then
 	
+		tas.settings.trigger_mapStart = not tas.settings.trigger_mapStart
+		
+		local status = (tas.settings.trigger_mapStart == true) and "ENABLED" or "DISABLED"
+		
+		tas.prompt("[TAS] ##Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
+	
+	-- // Clear all data.
+	elseif cmd == tas.registered_commands.clear_all then
+	
+		tas.data = {}
+		tas.warps = {}
+		
+		tas.prompt("[TAS] ##Cleared everything.", 255, 100, 255)
+		
 	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
 		tas.prompt("[TAS] ##Commands List:", 255, 100, 100)
@@ -513,7 +574,7 @@ end
 -- // Recording
 function tas.render_record()
 
-	local vehicle = getControlledVehicle(localPlayer)
+	local vehicle = tas.cveh(localPlayer)
 	
 	if vehicle then
 	
@@ -584,7 +645,7 @@ end
 -- // Playbacking
 function tas.render_playback()
 
-	local vehicle = getControlledVehicle(localPlayer)
+	local vehicle = tas.cveh(localPlayer)
 	
 	if vehicle and not isPedDead(localPlayer) then
 	
@@ -592,23 +653,27 @@ function tas.render_playback()
 		local real_time = (current_tick - tas.var.start_tick) * tas.settings.playbackSpeed
 		local inbetweening = 0
 
-		if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
-			while real_time > tas.data[tas.var.play_frame].tick do
-				tas.var.tick_1 = tas.data[tas.var.play_frame].tick
-				if tas.data[tas.var.play_frame+2] then
-					tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
-					tas.var.play_frame = tas.var.play_frame + 1
-				else
-					if tas.settings.stopPlaybackFinish then
-						executeCommandHandler(tas.registered_commands.playback)
-						return
+		if tas.settings.playbackInterpolation then
+			if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
+				while real_time > tas.data[tas.var.play_frame].tick do
+					tas.var.tick_1 = tas.data[tas.var.play_frame].tick
+					if tas.data[tas.var.play_frame+2] then
+						tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
+						tas.var.play_frame = tas.var.play_frame + 1
+					else
+						if tas.settings.stopPlaybackFinish then
+							executeCommandHandler(tas.registered_commands.playback)
+							return
+						end
+						break
 					end
-					break
 				end
 			end
+			
+			inbetweening = tas.clamp(0, (real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1)
+		else
+			tas.var.play_frame = tas.var.play_frame + 1
 		end
-		
-		inbetweening = tas.clamp(0, (real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1)
 		
 		if tas.settings.debugging then
 			dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
@@ -654,7 +719,7 @@ function tas.render_playback()
 	
 	else
 		
-		removeEventHandler("onClientHUDRender", root, tas.render_playback)
+		removeEventHandler("onClientRender", root, tas.render_playback)
 		tas.var.playbacking = false
 		tas.resetBinds()
 		
@@ -721,7 +786,7 @@ function tas.nos(vehicle, data)
 end
 
 -- // Shortcut
-function getControlledVehicle(player)
+function tas.cveh(player)
 	local vehicle = getPedOccupiedVehicle(player)
 	if vehicle and getVehicleController(vehicle) == player then
 		return vehicle
