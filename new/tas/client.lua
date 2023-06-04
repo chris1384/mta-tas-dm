@@ -605,6 +605,15 @@ function tas.commands(cmd, ...)
 		
 		tas.prompt("[TAS] ##Cleared everything.", 255, 100, 255)
 		
+	-- // Debugging
+	elseif cmd == tas.registered_commands.debug then
+	
+		tas.settings.debugging = not tas.settings.debugging
+		
+		local status = (tas.settings.debugging == true) and "ENABLED" or "DISABLED"
+		
+		tas.prompt("[TAS] ##Debugging is now: $$".. tostring(status), 255, 100, 255)
+		
 	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
 		tas.prompt("[TAS] ##Commands List:", 255, 100, 100)
@@ -784,9 +793,11 @@ end
 
 -- // Drawing debug
 function tas.dxDebug()
-	for i=1, #tas.data do
-		local x, y, z = unpack(tas.data[i].p)
-		dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 255), 5)
+	if tas.settings.debugging then
+		for i=1, #tas.data do
+			local x, y, z = unpack(tas.data[i].p)
+			dxDrawLine3D(x, y, z-0.5, x, y, z+0.5, tocolor(255, 0, 0, 255), 5)
+		end
 	end
 end
 
@@ -868,4 +879,9 @@ end
 -- // Used for efficient saving
 function tas.float(number)
 	return math_floor( number * 1000 ) * 0.001
+end
+
+-- // Wrapper for tocolor
+function tocolor(r, g, b, a)
+	return b + g * 256 + r * 256 * 256 + (a or 255) * 256 * 256 * 256
 end
