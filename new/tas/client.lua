@@ -5,92 +5,106 @@
 
 -- // the root of your problems
 local tas = {
-				-- // hardcoded variables, do not edit
-				var = 	{
-							start_tick = 0, -- begin tick
-							difference_tick = 0, -- used to calculate the time difference between warps
-							tick_1 = 0, -- last frame tick
-							tick_2 = 0, -- next frame tick (used for interpolation)
-							play_frame = 1, -- used for table indexing
-				
-							recording = false,
-							recording_fbf = false, -- unused
-							fbf_switch = 0, -- unused
-							
-							rewinding = false, -- unused
-							
-							loading_warp = false, -- restrict stopping recording when warp is loading
-							
-							playbacking = false,
-						},
-						
-				data = {}, -- run data
-				warps = {}, -- warps
-				entities = {}, -- unused
-				
-				settings = 	{
-								startPrompt = true, -- show resource initialization text on startup
-								promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
-								
-								captureFramerate = false, 
-								--[[	specify the tick target you'd want to record your run, low values might be efficient for saving but can cause jittery playbacking. this should be considered as experimental.
-										please use values in miliseconds :: 1000 / FRAMERATE;
-										e.g. 1000 / 51
-										set to 'false' to disable it
-								]]
-								
-								trigger_mapStart = false, -- autotas switch, start recording on map start. if there's data found, switch to automatic playback instead
-								stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
-								
-								warpResume = 500, -- time until the vehicle resumes from loading a warp
-								
-								keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
-								saveWarpData = true, -- save warp data to .tas files
-								
-								playbackSpeed = 1, -- change playback speed
-								playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
-								
-								debugging = false, -- show debug info
-							},
-				timers = {}, -- warp load, warning timers etc.
-			}
+	-- // hardcoded variables, do not edit
+	var = 	{
+		start_tick = 0, -- begin tick
+		difference_tick = 0, -- used to calculate the time difference between warps
+		tick_1 = 0, -- last frame tick
+		tick_2 = 0, -- next frame tick (used for interpolation)
+		play_frame = 1, -- used for table indexing
+		
+		recording = false,
+		recording_fbf = false, -- [UNUSED]
+		fbf_switch = 0, -- [UNUSED]
+		
+		rewinding = false, -- [UNUSED]
+		
+		loading_warp = false, -- used to restrict stopping recording when warp is loading
+		
+		playbacking = false, -- magic happening
+			},
+			
+	data = {}, -- run data
+	warps = {}, -- warps
+	entities = {}, -- [UNUSED]
+	
+	settings = 	{
+		startPrompt = true, -- show resource initialization text on startup
+		promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
+		
+		captureFramerate = false, 
+		--[[
+			specify the tick target you'd want to record your run, low values might be efficient for saving but can cause jittery playbacking. this should be considered as experimental.
+			please use values in miliseconds :: 1000 / FRAMERATE;
+			e.g. 1000 / 51
+			set to 'false' to disable it
+		]]
+		
+		trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead
+		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
+		
+		warpResume = 500, -- time until the vehicle resumes from loading a warp
+		
+		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
+		saveWarpData = true, -- save warp data to .tas files
+		
+		usePrivateFolder = true, -- save or load all .tas files from the private mods folder (MTA:SA/mods/deathmatch/priv/.../tas). 
+		-- set this to false if you want to use the general folder (MTA:SA/mods/deathmatch/resources/tas)
+		
+		playbackSpeed = 1, -- change playback speed
+		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
+		
+		adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
+		adaptiveThreshold = 6, -- [UNUSED] minimum of frames 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
+		
+		detectGround = false, -- [UNUSED] tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
+		
+		debugging = false, -- show debug info
+	},
+	timers = {}, -- warp load, warning timers [UNUSED] etc.
+}
 			
 -- // Registered commands (edit to your liking)
 tas.registered_commands = {	
-								record = "record",
-								record_frame = "recordf",
-								playback = "playback",
-								save_warp = "rsw",
-								load_warp = "rlw",
-								delete_warp = "rdw",
-								switch_record = "switchr",
-								next_frame = "nf",
-								previous_frame = "pf",
-								load_record = "loadr",
-								save_record = "saver",
-								resume = "resume",
-								seek = "seek",
-								debug = "debugr",
-								autotas = "autotas",
-								clear_all = "clearall",
-								help = "tashelp",
-							}
+	record = "record",
+	record_frame = "recordf",
+	playback = "playback",
+	save_warp = "rsw",
+	load_warp = "rlw",
+	delete_warp = "rdw",
+	switch_record = "switchr",
+	next_frame = "nf",
+	previous_frame = "pf",
+	load_record = "loadr",
+	save_record = "saver",
+	resume = "resume",
+	seek = "seek",
+	debug = "debugr",
+	autotas = "autotas",
+	clear_all = "clearall",
+	help = "tashelp",
+}
 
 -- // Registered keys
 tas.registered_keys = {
-							w = "accelerate", 
-							a = "vehicle_left",
-							s = "brake_reverse",
-							d = "vehicle_right",
-							space = "handbrake",
-							arrow_u = "steer_forward",
-							arrow_d = "steer_back",
-							arrow_r = "vehicle_right",
-							arrow_l = "vehicle_left",
-							lctrl = "vehicle_fire",
-							lalt = "vehicle_secondary_fire",
-						}
+	w = "accelerate", 
+	a = "vehicle_left",
+	s = "brake_reverse",
+	d = "vehicle_right",
+	space = "handbrake",
+	arrow_u = "steer_forward",
+	arrow_d = "steer_back",
+	arrow_r = "vehicle_right",
+	arrow_l = "vehicle_left",
+	lctrl = "vehicle_fire",
+	lalt = "vehicle_secondary_fire",
+}
 						
+--[[ 
+	This part involves storing every function as local functions.
+	These can be helpful for speeding up the process of registering frames, play the run and loading or saving files.
+	If these ones bother you, delete them at your own risk.
+]]
 -- // Local storage
 local localPlayer = getLocalPlayer()
 local root = getRootElement()
@@ -130,6 +144,8 @@ local dxDrawText = dxDrawText
 local ipairs = ipairs
 local pairs = pairs
 local unpack = unpack
+local tostring = tostring
+local tonumber = tonumber
 
 -- // Cool math
 local math_pi = 3.1415926535898
@@ -149,6 +165,7 @@ local string_sub = string.sub
 local string_gsub = string.gsub
 local string_format = string.format
 
+-- // Local Functions End
 
 -- // Initialization
 function tas.init()
@@ -161,6 +178,8 @@ function tas.init()
 	for _,v in pairs(tas.registered_commands) do
 		addCommandHandler(v, tas.commands)
 	end
+	
+	addEventHandler("onClientRender", root, tas.dxDebug)
 	
 end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
@@ -254,6 +273,7 @@ function tas.commands(cmd, ...)
 	elseif cmd == tas.registered_commands.save_warp then
 	
 		if not vehicle then tas.prompt("[TAS] ##Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if tas.var.loading_warp then tas.prompt("[TAS] ##Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
 		
@@ -278,20 +298,30 @@ function tas.commands(cmd, ...)
 		if #tas.warps == 0 then tas.prompt("[TAS] ##Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("[TAS] ##Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		
+		local warp_number = #tas.warps
+		if args[1] ~= nil then
+			warp_number = tonumber(args[1])
+			if not warp_number or not tas.warps[warp_number] then
+				tas.prompt("[TAS] ##Loading warp failed, $$nonexistent ##warp index!", 255, 100, 100) return
+			end
+		end
+		
 		tas.var.loading_warp = true
 		
-		local w_data = tas.warps[#tas.warps]
+		local w_data = tas.warps[warp_number]
 		
 		if tas.var.recording then
 			removeEventHandler("onClientRender", root, tas.render_record)
 		end
 		
-		for i=w_data.frame, #tas.data do
+		for i=w_data.frame + 1, #tas.data do -- flawless
 			tas.data[i] = nil
 		end
 		
 		setElementPosition(vehicle, unpack(w_data.p))
 		setElementRotation(vehicle, unpack(w_data.r))
+		
+		setElementHealth(vehicle, w_data.h)
 		
 		setElementFrozen(vehicle, true)
 		
@@ -326,7 +356,7 @@ function tas.commands(cmd, ...)
 									
 								end, tas.settings.warpResume, 1)
 								
-		tas.prompt("[TAS] ##Warp $$#"..tostring(#tas.warps).." ##loaded!", 255, 180, 60)
+		tas.prompt("[TAS] ##Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
 		
 	-- // Delete Warp
 	elseif cmd == tas.registered_commands.delete_warp then
@@ -338,6 +368,10 @@ function tas.commands(cmd, ...)
 		
 		table_remove(tas.warps, last_warp)
 		tas.prompt("[TAS] ##Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
+	
+	-- // Resume
+	elseif cmd == tas.registered_commands.resume then
+		tas.prompt("[TAS] ##resume", 255, 50, 50)
 		
 	-- // Save Recording
 	elseif cmd == tas.registered_commands.save_record then
@@ -358,10 +392,13 @@ function tas.commands(cmd, ...)
 		end
 		if #tas.data == 0 then tas.prompt("[TAS] ##Saving failed, no $$data ##recorded!", 255, 100, 100) return end
 		
-		--if fileExists("@saves/"..args[1]..".tas") then fileDelete("@saves/"..args[1]..".tas") end
-		if fileExists("@saves/"..args[1]..".tas") then tas.prompt("[TAS] ##Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
+		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
+		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 		
-		local save_file = fileCreate("@saves/"..args[1]..".tas")
+		--if fileExists("@saves/"..args[1]..".tas") then fileDelete("@saves/"..args[1]..".tas") end
+		if fileExists(fileTarget) then tas.prompt("[TAS] ##Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
+		
+		local save_file = fileCreate(fileTarget)
 		if save_file then
 		
 			-- // Header
@@ -415,13 +452,16 @@ function tas.commands(cmd, ...)
 	-- // Load Recording
 	elseif cmd == tas.registered_commands.load_record then
 	
+		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
+		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
+	
 		if args[1] == nil then 
 			tas.prompt("[TAS] ##Loading record failed, please specify the $$name ##of your file!", 255, 100, 100) 
 			tas.prompt("[TAS] ##Example: $$/"..tas.registered_commands.load_record.." od3", 255, 100, 100) 
 			return 
 		end
 		
-		local load_file = (fileExists("@saves/"..args[1]..".tas") == true and fileOpen("@saves/"..args[1]..".tas")) or false
+		local load_file = (fileExists(fileTarget) == true and fileOpen(fileTarget)) or false
 		
 		if load_file then
 		
@@ -557,6 +597,9 @@ function tas.commands(cmd, ...)
 	-- // Clear all data.
 	elseif cmd == tas.registered_commands.clear_all then
 	
+		if tas.var.recording then tas.prompt("[TAS] ##Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("[TAS] ##Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
+	
 		tas.data = {}
 		tas.warps = {}
 		
@@ -568,6 +611,8 @@ function tas.commands(cmd, ...)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
 	end
 end
 
@@ -672,7 +717,16 @@ function tas.render_playback()
 			
 			inbetweening = tas.clamp(0, (real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1)
 		else
+			local limit = #tas.data - 1
 			tas.var.play_frame = tas.var.play_frame + 1
+			
+			if tas.var.play_frame > limit then 
+				tas.var.play_frame = limit 
+				if tas.settings.stopPlaybackFinish then
+					executeCommandHandler(tas.registered_commands.playback)
+					return
+				end
+			end
 		end
 		
 		if tas.settings.debugging then
@@ -725,6 +779,14 @@ function tas.render_playback()
 		
 		tas.prompt("[TAS] ##Playbacking stopped due to an error!", 255, 100, 100)
 			
+	end
+end
+
+-- // Drawing debug
+function tas.dxDebug()
+	for i=1, #tas.data do
+		local x, y, z = unpack(tas.data[i].p)
+		dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 255), 5)
 	end
 end
 
