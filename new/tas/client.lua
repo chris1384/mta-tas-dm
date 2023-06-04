@@ -22,7 +22,7 @@ local tas = {
 		loading_warp = false, -- used to restrict stopping recording when warp is loading
 		
 		playbacking = false, -- magic happening
-			},
+	},
 			
 	data = {}, -- run data
 	warps = {}, -- warps
@@ -46,10 +46,13 @@ local tas = {
 		warpResume = 500, -- time until the vehicle resumes from loading a warp
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
+		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
 		saveWarpData = true, -- save warp data to .tas files
 		
 		usePrivateFolder = true, -- save or load all .tas files from the private mods folder (MTA:SA/mods/deathmatch/priv/.../tas). 
 		-- set this to false if you want to use the general folder (MTA:SA/mods/deathmatch/resources/tas)
+		
+		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
 		
 		playbackSpeed = 1, -- change playback speed
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
@@ -225,6 +228,23 @@ function tas.commands(cmd, ...)
 		if tas.var.playbacking then tas.prompt("[TAS] ##Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("[TAS] ##Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
+		if tas.settings.useWarnings then
+			if not tas.var.recording and not tas.timers.warnRecord then
+				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
+				if #tas.data > 0 then
+					tas.prompt("[TAS] ##Are you sure you want to start a $$new ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
+					return 
+				elseif #tas.data < 1 and #tas.warps > 0 then
+					if not tas.settings.keepUnrecordedWarps then
+						tas.prompt("[TAS] ##Existing warps found, are you sure you want to $$start ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
+						return 
+					end
+				end
+			end
+		end
+		
+		tas.timers.warnRecord = nil
+		
 		if tas.var.recording then
 		
 			if tas.var.loading_warp then tas.prompt("[TAS] ##Stopping record failed, please wait a bit!", 255, 100, 100) return end
@@ -236,7 +256,7 @@ function tas.commands(cmd, ...)
 		else
 			tas.data = {}
 			
-			if tas.settings.keepWarpData ~= true then
+			if not tas.settings.keepWarpData then
 				tas.warps = {}
 			end
 			
@@ -277,6 +297,11 @@ function tas.commands(cmd, ...)
 		if tas.var.loading_warp then tas.prompt("[TAS] ##Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
+		local frame = #tas.data
+		
+		if not tas.var.recording then
+			tick, frame = nil, nil
+		end
 		
 		table_insert(tas.warps, {
 									frame = #tas.data,
@@ -308,17 +333,19 @@ function tas.commands(cmd, ...)
 			end
 		end
 		
-		tas.var.loading_warp = true
-		
 		local w_data = tas.warps[warp_number]
 		
 		if tas.var.recording then
+			if not w_data.tick or not w_data.frame then
+				tas.prompt("[TAS] ##Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) return
+			end
 			removeEventHandler("onClientRender", root, tas.render_record)
+			for i=w_data.frame + 1, #tas.data do -- flawless
+				tas.data[i] = nil
+			end
 		end
 		
-		for i=w_data.frame + 1, #tas.data do -- flawless
-			tas.data[i] = nil
-		end
+		tas.var.loading_warp = true
 		
 		setElementPosition(vehicle, unpack(w_data.p))
 		setElementRotation(vehicle, unpack(w_data.r))
@@ -427,12 +454,14 @@ function tas.commands(cmd, ...)
 									
 								end, tas.settings.warpResume, 1)
 		
-		tas.prompt("[TAS] ##Resumed from frame $$#"..resume_number.."##.", 100, 255, 100)
+		tas.prompt("[TAS] ##Resumed from frame $$#"..resume_number.."##. Recording frames..", 100, 255, 100)
 		
+	-- // Seek
 	elseif cmd == tas.registered_commands.seek then
 	
 		if #tas.data < 1 then tas.prompt("[TAS] ##Seeking failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.var.recording or tas.timers.resume_load then tas.prompt("[TAS] ##Seeking failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("[TAS] ##Seeking failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local seek_number = 1
 		if args[1] ~= nil then
@@ -474,7 +503,6 @@ function tas.commands(cmd, ...)
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 		
-		--if fileExists("@saves/"..args[1]..".tas") then fileDelete("@saves/"..args[1]..".tas") end
 		if fileExists(fileTarget) then tas.prompt("[TAS] ##Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
 		
 		local save_file = fileCreate(fileTarget)
@@ -566,13 +594,6 @@ function tas.commands(cmd, ...)
 					
 						local att = split(run_data[i], "|")
 						
-						--[[
-						local p = {loadstring("return "..att[2])()}
-						local r = {loadstring("return "..att[3])()}
-						local v = {loadstring("return "..att[4])()}
-						local rv = {loadstring("return "..att[5])()}
-						]]
-						
 						local p = split(att[2], ",") 
 						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
 						
@@ -620,13 +641,6 @@ function tas.commands(cmd, ...)
 					for i=1, #warp_data do
 					
 						local att = split(warp_data[i], "|")
-						
-						--[[
-						local p = {loadstring("return "..att[3])()}
-						local r = {loadstring("return "..att[4])()}
-						local v = {loadstring("return "..att[5])()}
-						local rv = {loadstring("return "..att[6])()}
-						]]
 						
 						local p = split(att[3], ",") 
 						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
@@ -683,11 +697,22 @@ function tas.commands(cmd, ...)
 	
 		if tas.var.recording then tas.prompt("[TAS] ##Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("[TAS] ##Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
-	
+		if #tas.data < 1 then tas.prompt("[TAS] ##Nothing to clear.", 255, 100, 100) return end
+		
+		if tas.settings.useWarnings then
+			if #tas.data > 0 and not tas.timers.warnClear then
+				tas.timers.warnClear = setTimer(function() tas.timers.warnClear = nil end, 5000, 1)
+				tas.prompt("[TAS] ##Are you sure you want to $$clear ##everything? Use $$/"..tas.registered_commands.clear_all.." ##again to proceed.", 255, 100, 100)
+				return 
+			end
+		end
+		
+		tas.timers.warnClear = nil
+		
 		tas.data = {}
 		tas.warps = {}
 		
-		tas.prompt("[TAS] ##Cleared everything.", 255, 100, 255)
+		tas.prompt("[TAS] ##Cleared all data.", 255, 100, 255)
 		
 	-- // Debugging
 	elseif cmd == tas.registered_commands.debug then
@@ -703,9 +728,11 @@ function tas.commands(cmd, ...)
 		tas.prompt("[TAS] ##Commands List:", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.resume.." $$| ##/"..tas.registered_commands.seek.." $$- ##resume $$| ##seek from a frame", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
 		tas.prompt("[TAS] ##/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
+		tas.prompt("[TAS] ##/"..tas.registered_commands.debug.." $$- ##toggle debugging", 255, 100, 100)
 	end
 end
 
@@ -881,7 +908,7 @@ function tas.dxDebug()
 	if tas.settings.debugging then
 		for i=1, #tas.data do
 			local x, y, z = unpack(tas.data[i].p)
-			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 255), 5)
+			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 100), 5)
 		end
 	end
 end
