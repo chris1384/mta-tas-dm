@@ -192,7 +192,6 @@ addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
 
 -- // Custom Race Events
 function tas.raceWrap(event)
-	iprint(source, event)
 	if not tas.settings.trigger_mapStart then return end
 	if event == "Started" then
 		if tas.var.recording or tas.var.playbacking then return end
@@ -224,6 +223,7 @@ function tas.commands(cmd, ...)
 		
 		if not vehicle then tas.prompt("[TAS] ##Recording failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("[TAS] ##Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("[TAS] ##Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		if tas.var.recording then
 		
@@ -253,6 +253,7 @@ function tas.commands(cmd, ...)
 	
 		if #tas.data < 1 then tas.prompt("[TAS] ##Playbacking failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.var.recording then tas.prompt("[TAS] ##Playbacking failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("[TAS] ##Playbacking failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		if tas.var.playbacking then
 			removeEventHandler("onClientRender", root, tas.render_playback)
@@ -297,6 +298,7 @@ function tas.commands(cmd, ...)
 		if not vehicle then tas.prompt("[TAS] ##Loading warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if #tas.warps == 0 then tas.prompt("[TAS] ##Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("[TAS] ##Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("[TAS] ##Loading warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local warp_number = #tas.warps
 		if args[1] ~= nil then
@@ -371,8 +373,85 @@ function tas.commands(cmd, ...)
 	
 	-- // Resume
 	elseif cmd == tas.registered_commands.resume then
-		tas.prompt("[TAS] ##resume", 255, 50, 50)
+	
+		if #tas.data < 1 then tas.prompt("[TAS] ##Resuming failed, no $$recorded data ##found!", 255, 100, 100) return end
+	
+		local resume_number = #tas.data
+		if args[1] ~= nil then
+			resume_number = tonumber(args[1])
+			if not resume_number or not tas.data[resume_number] then
+				tas.prompt("[TAS] ##Resuming failed, $$nonexistent ##record frame!", 255, 100, 100) return
+			end
+		end
 		
+		if tas.timers.resume_load then tas.prompt("[TAS] ##Resuming failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.recording then tas.prompt("[TAS] ##Resuming failed, stop $$recording ##first!", 255, 100, 100) return end
+		
+		local resume_data = tas.data[resume_number]
+		
+		if resume_number ~= #tas.data then
+			for i=resume_number, #tas.data do
+				tas.data[i] = nil
+			end
+		end
+		
+		setElementPosition(vehicle, unpack(resume_data.p))
+		setElementRotation(vehicle, unpack(resume_data.r))
+		
+		setElementHealth(vehicle, resume_data.h)
+		
+		setElementFrozen(vehicle, true)
+		
+		if getElementModel(vehicle) ~= resume_data.m then
+			setElementModel(vehicle, resume_data.m)
+			triggerServerEvent("tas:onModelChange", vehicle, resume_data.m)
+		end
+		
+		tas.timers.resume_load = setTimer(function()
+		
+									setElementFrozen(vehicle, false)
+									
+									setElementVelocity(vehicle, unpack(resume_data.v))
+									setElementAngularVelocity(vehicle, unpack(resume_data.rv))
+									
+									setElementHealth(vehicle, resume_data.h)
+		
+									tas.nos(vehicle, resume_data.n)
+									
+									tas.var.start_tick = getTickCount() - resume_data.tick
+									
+									addEventHandler("onClientRender", root, tas.render_record)
+									tas.var.recording = true
+									
+									tas.timers.resume_load = nil
+									
+								end, tas.settings.warpResume, 1)
+		
+		tas.prompt("[TAS] ##Resumed from frame $$#"..resume_number.."##.", 100, 255, 100)
+		
+	elseif cmd == tas.registered_commands.seek then
+	
+		if #tas.data < 1 then tas.prompt("[TAS] ##Seeking failed, no $$recorded data ##found!", 255, 100, 100) return end
+		if tas.var.recording or tas.timers.resume_load then tas.prompt("[TAS] ##Seeking failed, stop $$recording ##first!", 255, 100, 100) return end
+		
+		local seek_number = 1
+		if args[1] ~= nil then
+			seek_number = tonumber(args[1])
+			if not seek_number or not tas.data[seek_number] or seek_number < 1 or seek_number > #tas.data then
+				tas.prompt("[TAS] ##Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) return
+			end
+		end
+		
+		if not tas.var.playbacking then
+			tas.var.playbacking = true
+			addEventHandler("onClientRender", root, tas.render_playback)
+		end
+		
+		tas.var.play_frame = seek_number
+		tas.var.start_tick = getTickCount() - tas.data[seek_number].tick
+		
+		tas.prompt("[TAS] ##Seek to frame $$#"..seek_number.."##.", 100, 100, 255)
+	
 	-- // Save Recording
 	elseif cmd == tas.registered_commands.save_record then
 	
@@ -414,12 +493,17 @@ function tas.commands(cmd, ...)
 				local run = tas.data[i]
 				local nos = "-1"
 				
-				if run.n ~= nil then
+				if run.n then
 					local active = ((run.n.a == true) and "1") or "0"
 					nos = tostring(run.n.c)..","..tostring(tas.float(run.n.l))..",".. active
 				end
 				
-				fileWrite(save_file, string_format("%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s|%s", run.tick, run.p[1], run.p[2], run.p[3], run.r[1], run.r[2], run.r[3], run.v[1], run.v[2], run.v[3], tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, table_concat(run.k, ",")).."\n")
+				local keys = ""
+				if run.k then
+					keys = table_concat(run.k, ",")
+				end
+				
+				fileWrite(save_file, string_format("%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s|%s", run.tick, run.p[1], run.p[2], run.p[3], run.r[1], run.r[2], run.r[3], run.v[1], run.v[2], run.v[3], tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, keys).."\n")
 			end
 			
 			fileWrite(save_file, "-run\n")
@@ -433,7 +517,7 @@ function tas.commands(cmd, ...)
 					local warp = tas.warps[i]
 					local nos = "-1"
 					
-					if warp.n ~= nil then
+					if warp.n then
 						local active = ((warp.n.a == true) and "1") or "0"
 						nos = tostring(warp.n.c)..","..tostring(tas.float(warp.n.l))..",".. active
 					end
@@ -660,42 +744,6 @@ function tas.render_record()
 	end
 end
 
--- // Recording vehicle state
-function tas.record_state(vehicle, ped)
-
-	if vehicle then
-	
-		local current_tick = getTickCount()
-		local real_time = current_tick - tas.var.difference_tick - tas.var.start_tick
-	
-		local p = {getElementPosition(vehicle)}
-		local r = {getElementRotation(vehicle)}
-		local v = {getElementVelocity(vehicle)}
-		local rv = {getElementAngularVelocity(vehicle)}
-		
-		local health = getElementHealth(vehicle)
-		local model = getElementModel(vehicle)
-		
-		local nos
-		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
-			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
-			if count and level then
-				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
-			end
-		end
-		
-		local keys = {}
-		for k in pairs(tas.registered_keys) do
-			if getKeyState(k) then
-				table_insert(keys, k)
-			end
-		end
-		
-		return real_time, p, r, v, rv, health, model, nos, keys
-					
-	end
-end
-
 -- // Playbacking
 function tas.render_playback()
 
@@ -791,12 +839,49 @@ function tas.render_playback()
 	end
 end
 
+-- // Recording vehicle state
+function tas.record_state(vehicle, ped)
+
+	if vehicle then
+	
+		local current_tick = getTickCount()
+		local real_time = current_tick - tas.var.difference_tick - tas.var.start_tick
+	
+		local p = {getElementPosition(vehicle)}
+		local r = {getElementRotation(vehicle)}
+		local v = {getElementVelocity(vehicle)}
+		local rv = {getElementAngularVelocity(vehicle)}
+		
+		local health = getElementHealth(vehicle)
+		local model = getElementModel(vehicle)
+		
+		local nos
+		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
+			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
+			if count and level then
+				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
+			end
+		end
+		
+		local keys = nil
+		for k in pairs(tas.registered_keys) do
+			if getKeyState(k) then
+				if not keys then keys = {} end
+				table_insert(keys, k)
+			end
+		end
+		
+		return real_time, p, r, v, rv, health, model, nos, keys
+					
+	end
+end
+
 -- // Drawing debug
 function tas.dxDebug()
 	if tas.settings.debugging then
 		for i=1, #tas.data do
 			local x, y, z = unpack(tas.data[i].p)
-			dxDrawLine3D(x, y, z-0.5, x, y, z+0.5, tocolor(255, 0, 0, 255), 5)
+			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 255), 5)
 		end
 	end
 end
