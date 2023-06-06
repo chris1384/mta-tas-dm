@@ -31,6 +31,7 @@ local tas = {
 tas.registered_commands = {	
 	playback = "playback",
 	load_record = "loadr",
+	clear_all = "clearall",
 	debug = "debugr",
 }
 
