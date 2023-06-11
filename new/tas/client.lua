@@ -7,8 +7,7 @@
 local tas = {
 	-- // hardcoded variables, do not edit
 	var = 	{
-		start_tick = 0, -- begin tick
-		difference_tick = 0, -- used to calculate the time difference between warps
+		record_tick = 0, -- used to store frame ticks for smooth playback
 		tick_1 = 0, -- last frame tick
 		tick_2 = 0, -- next frame tick (used for interpolation)
 		play_frame = 1, -- used for table indexing
@@ -22,6 +21,8 @@ local tas = {
 		loading_warp = false, -- used to restrict stopping recording when warp is loading
 		
 		playbacking = false, -- magic happening
+		
+		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
 	},
 			
 	data = {}, -- run data
@@ -32,52 +33,84 @@ local tas = {
 		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
-		captureFramerate = false, 
-		--[[
-			specify the tick target you'd want to record your run, low values might be efficient for saving but can cause jittery playbacking. this should be considered as experimental.
-			please use values in miliseconds :: 1000 / FRAMERATE;
-			e.g. 1000 / 51
-			set to 'false' to disable it
-		]]
-		
+		-- // General
 		trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead
 		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 		
+		usePrivateFolder = true, 
+		--[[
+			save or load all .tas files from the private mods folder (MTA:SA/mods/deathmatch/priv/.../tas). 
+		 	set this to false if you want to use the general folder (MTA:SA/mods/deathmatch/resources/tas)
+		]]
+		
+		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
+		-- //
+		
+		-- // Warp Settings
 		warpResume = 500, -- time until the vehicle resumes from loading a warp
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
 		saveWarpData = true, -- save warp data to .tas files
+		-- //
 		
-		usePrivateFolder = true, -- save or load all .tas files from the private mods folder (MTA:SA/mods/deathmatch/priv/.../tas). 
-		-- set this to false if you want to use the general folder (MTA:SA/mods/deathmatch/resources/tas)
 		
-		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
+		-- // Record Settings
+		precautiousRecording = true, 
+		--[[ 
+			~STILL NEEDS TESTING~
+			CURRENT BUGS: tick can return -nan(ind) or negative values, the function can end up in a loop or it might screw up teleportation scripts.
+			use the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
+			DO NOT RECORD WITH FPS HIGHER THAN 51, IT CAN CAUSE MASSIVE BUGS!!!
+			
+		]]
+		-- //
 		
-		playbackSpeed = 1, -- change playback speed
+		-- // Playback Settings
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
+		playbackSpeed = 1, -- change playback speed
 		
 		adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
-		adaptiveThreshold = 6, -- [UNUSED] minimum of frames 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
+		adaptiveThreshold = 6, -- [UNUSED] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
 		
-		detectGround = false, -- [UNUSED] tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
+		useMacros = false, 
+		--[[ 	
+			use only keybinds while playbacking; position, rotation, velocity, health, nos and model recorded won't be used with helping of the run.
+			please disable 'playbackInterpolation' or set 'playbackSpeed' to 1 for this to work properly [UNSURE]
+			keep in mind that any lagspike can severely affect the playback. for that, use adaptiveInterpolation. [UNUSED]
+			not recommended while showcasing maps and it's mainly used for debugging
+		]]
+		-- //
 		
-		debugging = false, -- show debug info
+		-- // Debugging Settings
+		debugging = {
+			level = 0,
+			--[[
+				set the debug level for TAS. the value can be:
+				0. disabled
+				1. basic (key controls only, convenient for tutorial runs)
+				2. advanced (key controls, pathway and (chat) info)
+				3. thorough (controls, pathway and full info about frames [LAGGY MESS])
+			]]
+			offsetX = 0, -- offset for hud
+			
+			detectGround = true, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
+		},
 	},
-	timers = {}, -- warp load, warning timers [UNUSED] etc.
+	timers = {}, -- warp load, resume timer, warning timers etc.
 }
 			
 -- // Registered commands (edit to your liking)
 tas.registered_commands = {	
 	record = "record",
-	record_frame = "recordf",
+	record_frame = "recordf", -- [UNUSED]
 	playback = "playback",
 	save_warp = "rsw",
 	load_warp = "rlw",
 	delete_warp = "rdw",
-	switch_record = "switchr",
-	next_frame = "nf",
-	previous_frame = "pf",
+	switch_record = "switchr", -- [UNUSED]
+	next_frame = "nf", -- [UNUSED]
+	previous_frame = "pf", -- [UNUSED]
 	load_record = "loadr",
 	save_record = "saver",
 	resume = "resume",
@@ -116,10 +149,10 @@ local getTickCount = getTickCount
 
 local getPedOccupiedVehicle = getPedOccupiedVehicle
 local getVehicleController = getVehicleController
+local isVehicleWheelOnGround = isVehicleWheelOnGround
 local getVehicleNitroCount = getVehicleNitroCount
 local getVehicleNitroLevel = getVehicleNitroLevel
 local getVehicleNitroActivated = getVehicleNitroActivated
-
 local setVehicleNitroCount = setVehicleNitroCount
 local setVehicleNitroLevel = setVehicleNitroLevel
 local setVehicleNitroActivated = setVehicleNitroActivated
@@ -130,7 +163,6 @@ local getElementVelocity = getElementVelocity
 local getElementAngularVelocity = getElementAngularVelocity
 local getElementHealth = getElementHealth
 local getElementModel = getElementModel
-
 local setElementPosition = setElementPosition
 local setElementRotation = setElementRotation
 local setElementVelocity = setElementVelocity
@@ -139,9 +171,11 @@ local setElementHealth = setElementHealth
 local setElementModel = setElementModel
 
 local getKeyState = getKeyState
+local getPedControlState = getPedControlState
 local setPedControlState = setPedControlState
 
 local dxDrawText = dxDrawText
+local dxDrawLine3D = dxDrawLine3D
 
 -- // Cool LUA
 local ipairs = ipairs
@@ -158,6 +192,8 @@ local math_abs = math.abs
 local math_min = math.min
 local math_max = math.max
 local math_floor = math.floor
+local math_ceil = math.ceil
+local math_sqrt = math.sqrt
 
 -- // Other
 local table_insert = table.insert
@@ -174,8 +210,8 @@ local string_format = string.format
 function tas.init()
 
 	if tas.settings.startPrompt then
-		tas.prompt("[TAS] ##Recording Tool $$v1.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
-		tas.prompt("[TAS] ##Type $$/tashelp ##for commands!", 255, 100, 100)
+		tas.prompt("Recording Tool $$v1.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
+		tas.prompt("Type $$/tashelp ##for commands!", 255, 100, 100)
 	end
 	
 	for _,v in pairs(tas.registered_commands) do
@@ -224,19 +260,19 @@ function tas.commands(cmd, ...)
 	-- // Record
 	if cmd == tas.registered_commands.record then
 		
-		if not vehicle then tas.prompt("[TAS] ##Recording failed, get a $$vehicle ##first!", 255, 100, 100) return end
-		if tas.var.playbacking then tas.prompt("[TAS] ##Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
-		if tas.timers.resume_load then tas.prompt("[TAS] ##Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Recording failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
 			if not tas.var.recording and not tas.timers.warnRecord then
 				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
 				if #tas.data > 0 then
-					tas.prompt("[TAS] ##Are you sure you want to start a $$new ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
+					tas.prompt("Are you sure you want to start a $$new ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
 					return 
 				elseif #tas.data < 1 and #tas.warps > 0 then
 					if not tas.settings.keepUnrecordedWarps then
-						tas.prompt("[TAS] ##Existing warps found, are you sure you want to $$start ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
+						tas.prompt("Existing warps found, are you sure you want to $$start ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
 						return 
 					end
 				end
@@ -247,12 +283,12 @@ function tas.commands(cmd, ...)
 		
 		if tas.var.recording then
 		
-			if tas.var.loading_warp then tas.prompt("[TAS] ##Stopping record failed, please wait a bit!", 255, 100, 100) return end
+			if tas.var.loading_warp then tas.prompt("Stopping record failed, please wait a bit!", 255, 100, 100) return end
 			
-			removeEventHandler("onClientRender", root, tas.render_record)
+			removeEventHandler("onClientPreRender", root, tas.render_record)
 			tas.var.recording = false
 			
-			tas.prompt("[TAS] ##Recording stopped! ($$"..tostring(#tas.data).." ##frames)", 100, 255, 100)
+			tas.prompt("Recording stopped! ($$"..tostring(#tas.data).." ##frames)", 100, 255, 100)
 		else
 			tas.data = {}
 			
@@ -261,40 +297,48 @@ function tas.commands(cmd, ...)
 			end
 			
 			tas.var.recording = true
-			tas.var.start_tick = getTickCount()
-			tas.var.difference_tick = 0
-			addEventHandler("onClientRender", root, tas.render_record)
+			tas.var.record_tick = getTickCount()
+			tas.var.fps = getFPSLimit()
+			addEventHandler("onClientPreRender", root, tas.render_record)
 			
-			tas.prompt("[TAS] ##Recording frames..", 100, 255, 100)
+			tas.prompt("Recording frames..", 100, 255, 100)
 		end
 		
 	-- // Playback
 	elseif cmd == tas.registered_commands.playback then
 	
-		if #tas.data < 1 then tas.prompt("[TAS] ##Playbacking failed, no $$recorded data ##found!", 255, 100, 100) return end
-		if tas.var.recording then tas.prompt("[TAS] ##Playbacking failed, stop $$recording ##first!", 255, 100, 100) return end
-		if tas.timers.resume_load then tas.prompt("[TAS] ##Playbacking failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Playbacking failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if #tas.data < 1 then tas.prompt("Playbacking failed, no $$recorded data ##found!", 255, 100, 100) return end
+		if tas.var.recording then tas.prompt("Playbacking failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Playbacking failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		if tas.var.playbacking then
 			removeEventHandler("onClientRender", root, tas.render_playback)
 			tas.var.playbacking = false
 			tas.resetBinds()
 			
-			tas.prompt("[TAS] ##Playbacking stopped!", 100, 100, 255)
+			tas.prompt("Playbacking stopped!", 100, 100, 255)
 		else
 			addEventHandler("onClientRender", root, tas.render_playback)
 			tas.var.playbacking = true
 			tas.var.play_frame = 1
-			tas.var.start_tick = getTickCount()
+			tas.var.record_tick = getTickCount()
 			
-			tas.prompt("[TAS] ##Playbacking started!", 100, 100, 255)
+			if tas.settings.useMacros then
+				setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
+				setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
+				setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
+				setElementAngularVelocity(vehicle, unpack(tas.data[tas.var.play_frame].rv))
+			end
+			
+			tas.prompt("Playbacking started!", 100, 100, 255)
 		end
 	
 	-- // Save Warp
 	elseif cmd == tas.registered_commands.save_warp then
 	
-		if not vehicle then tas.prompt("[TAS] ##Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
-		if tas.var.loading_warp then tas.prompt("[TAS] ##Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if tas.var.loading_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
 		local frame = #tas.data
@@ -315,21 +359,21 @@ function tas.commands(cmd, ...)
 									n = nos,
 								})
 								
-		tas.prompt("[TAS] ##Warp $$#"..tostring(#tas.warps).." ##saved!", 60, 180, 255)
+		tas.prompt("Warp $$#"..tostring(#tas.warps).." ##saved!", 60, 180, 255)
 		
 	-- // Load Warp
 	elseif cmd == tas.registered_commands.load_warp then
 		
-		if not vehicle then tas.prompt("[TAS] ##Loading warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
-		if #tas.warps == 0 then tas.prompt("[TAS] ##Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
-		if tas.var.playbacking then tas.prompt("[TAS] ##Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
-		if tas.timers.resume_load then tas.prompt("[TAS] ##Loading warp failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Loading warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if #tas.warps == 0 then tas.prompt("Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Loading warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local warp_number = #tas.warps
 		if args[1] ~= nil then
 			warp_number = tonumber(args[1])
 			if not warp_number or not tas.warps[warp_number] then
-				tas.prompt("[TAS] ##Loading warp failed, $$nonexistent ##warp index!", 255, 100, 100) return
+				tas.prompt("Loading warp failed, $$nonexistent ##warp index!", 255, 100, 100) return
 			end
 		end
 		
@@ -337,11 +381,19 @@ function tas.commands(cmd, ...)
 		
 		if tas.var.recording then
 			if not w_data.tick or not w_data.frame then
-				tas.prompt("[TAS] ##Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) return
+				tas.prompt("Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) return
 			end
-			removeEventHandler("onClientRender", root, tas.render_record)
-			for i=w_data.frame + 1, #tas.data do -- flawless
-				tas.data[i] = nil
+			
+			removeEventHandler("onClientPreRender", root, tas.render_record)
+			
+			if w_data.tick <= tas.data[#tas.data].tick then
+				for i=w_data.frame + 1, #tas.data do -- flawless
+					tas.data[i] = nil
+				end
+			else
+				tas.var.recording = false
+				tas.prompt("Critical error, warp tick is $$bigger ##than last frame tick!", 255, 100, 100)
+				tas.prompt("Recording stopped for safety, use $$/"..tas.registered_commands.resume.." ## to properly continue your run!", 255, 100, 100) 
 			end
 		end
 		
@@ -376,8 +428,8 @@ function tas.commands(cmd, ...)
 									tas.nos(vehicle, w_data.n)
 									
 									if tas.var.recording then
-										tas.var.difference_tick = (getTickCount() - w_data.tick - tas.var.start_tick)
-										addEventHandler("onClientRender", root, tas.render_record)
+										tas.var.record_tick = getTickCount() - w_data.tick
+										addEventHandler("onClientPreRender", root, tas.render_record)
 									end
 									
 									tas.timers.load_warp = nil
@@ -385,7 +437,7 @@ function tas.commands(cmd, ...)
 									
 								end, tas.settings.warpResume, 1)
 								
-		tas.prompt("[TAS] ##Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
+		tas.prompt("Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
 		
 	-- // Delete Warp
 	elseif cmd == tas.registered_commands.delete_warp then
@@ -393,31 +445,36 @@ function tas.commands(cmd, ...)
 		local last_warp = #tas.warps
 		
 		if isCursorShowing() then return end
-		if last_warp == 0 then tas.prompt("[TAS] ##Deleting warp failed, no $$warps ##recorded!", 255, 100, 100) return end
+		if last_warp == 0 then tas.prompt("Deleting warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		
 		table_remove(tas.warps, last_warp)
-		tas.prompt("[TAS] ##Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
+		tas.prompt("Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
 	
 	-- // Resume
 	elseif cmd == tas.registered_commands.resume then
 	
-		if #tas.data < 1 then tas.prompt("[TAS] ##Resuming failed, no $$recorded data ##found!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Resuming failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if #tas.data < 1 then tas.prompt("Resuming failed, no $$recorded data ##found!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Resuming failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Resuming failed, stop $$playbacking ##first!", 255, 100, 100) return end
 	
 		local resume_number = #tas.data
 		if args[1] ~= nil then
 			resume_number = tonumber(args[1])
 			if not resume_number or not tas.data[resume_number] then
-				tas.prompt("[TAS] ##Resuming failed, $$nonexistent ##record frame!", 255, 100, 100) return
+				tas.prompt("Resuming failed, $$nonexistent ##record frame!", 255, 100, 100) return
 			end
 		end
 		
-		if tas.timers.resume_load then tas.prompt("[TAS] ##Resuming failed, please wait for the resume trigger!", 255, 100, 100) return end
-		if tas.var.recording then tas.prompt("[TAS] ##Resuming failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.var.recording then
+			removeEventHandler("onClientPreRender", root, tas.render_record)
+			tas.var.recording = false
+		end
 		
 		local resume_data = tas.data[resume_number]
 		
 		if resume_number ~= #tas.data then
-			for i=resume_number, #tas.data do
+			for i=resume_number + 1, #tas.data do
 				tas.data[i] = nil
 			end
 		end
@@ -445,29 +502,30 @@ function tas.commands(cmd, ...)
 		
 									tas.nos(vehicle, resume_data.n)
 									
-									tas.var.start_tick = getTickCount() - resume_data.tick
-									
-									addEventHandler("onClientRender", root, tas.render_record)
+									addEventHandler("onClientPreRender", root, tas.render_record)
 									tas.var.recording = true
+									
+									tas.var.record_tick = getTickCount() - resume_data.tick
 									
 									tas.timers.resume_load = nil
 									
 								end, tas.settings.warpResume, 1)
 		
-		tas.prompt("[TAS] ##Resumed from frame $$#"..resume_number.."##. Recording frames..", 100, 255, 100)
+		tas.prompt("Resumed from frame $$#"..resume_number.."##. Recording frames..", 100, 255, 100)
 		
 	-- // Seek
 	elseif cmd == tas.registered_commands.seek then
 	
-		if #tas.data < 1 then tas.prompt("[TAS] ##Seeking failed, no $$recorded data ##found!", 255, 100, 100) return end
-		if tas.var.recording or tas.timers.resume_load then tas.prompt("[TAS] ##Seeking failed, stop $$recording ##first!", 255, 100, 100) return end
-		if tas.timers.resume_load then tas.prompt("[TAS] ##Seeking failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if not vehicle then tas.prompt("Seeking failed, get a $$vehicle ##first!", 255, 100, 100) return end
+		if #tas.data < 1 then tas.prompt("Seeking failed, no $$recorded data ##found!", 255, 100, 100) return end
+		if tas.var.recording or tas.timers.resume_load then tas.prompt("Seeking failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Seeking failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local seek_number = 1
 		if args[1] ~= nil then
 			seek_number = tonumber(args[1])
 			if not seek_number or not tas.data[seek_number] or seek_number < 1 or seek_number > #tas.data then
-				tas.prompt("[TAS] ##Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) return
+				tas.prompt("Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) return
 			end
 		end
 		
@@ -477,9 +535,16 @@ function tas.commands(cmd, ...)
 		end
 		
 		tas.var.play_frame = seek_number
-		tas.var.start_tick = getTickCount() - tas.data[seek_number].tick
+		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick) * tas.settings.playbackSpeed
 		
-		tas.prompt("[TAS] ##Seek to frame $$#"..seek_number.."##.", 100, 100, 255)
+		if tas.settings.useMacros then
+			setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
+			setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
+			setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
+			setElementAngularVelocity(vehicle, unpack(tas.data[tas.var.play_frame].rv))
+		end
+		
+		tas.prompt("Seek to frame $$#"..seek_number.."##.", 100, 100, 255)
 	
 	-- // Save Recording
 	elseif cmd == tas.registered_commands.save_record then
@@ -494,16 +559,16 @@ function tas.commands(cmd, ...)
 		-- -warps
 									
 		if args[1] == nil then 
-			tas.prompt("[TAS] ##Saving failed, please specify a $$name ##for your file!", 255, 100, 100) 
-			tas.prompt("[TAS] ##Example: $$/"..tas.registered_commands.save_record.." bbw", 255, 100, 100) 
+			tas.prompt("Saving failed, please specify a $$name ##for your file!", 255, 100, 100) 
+			tas.prompt("Example: $$/"..tas.registered_commands.save_record.." bbw", 255, 100, 100) 
 			return 
 		end
-		if #tas.data == 0 then tas.prompt("[TAS] ##Saving failed, no $$data ##recorded!", 255, 100, 100) return end
+		if #tas.data == 0 then tas.prompt("Saving failed, no $$data ##recorded!", 255, 100, 100) return end
 		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 		
-		if fileExists(fileTarget) then tas.prompt("[TAS] ##Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
+		if fileExists(fileTarget) then tas.prompt("Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
 		
 		local save_file = fileCreate(fileTarget)
 		if save_file then
@@ -558,7 +623,7 @@ function tas.commands(cmd, ...)
 			
 			fileClose(save_file)
 			
-			tas.prompt("[TAS] ##Your run has been saved to 'saves/"..args[1]..".tas'", 255, 255, 100)
+			tas.prompt("Your run has been saved to 'saves/"..args[1]..".tas'", 255, 255, 100)
 		end
 	
 	-- // Load Recording
@@ -568,8 +633,8 @@ function tas.commands(cmd, ...)
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 	
 		if args[1] == nil then 
-			tas.prompt("[TAS] ##Loading record failed, please specify the $$name ##of your file!", 255, 100, 100) 
-			tas.prompt("[TAS] ##Example: $$/"..tas.registered_commands.load_record.." od3", 255, 100, 100) 
+			tas.prompt("Loading record failed, please specify the $$name ##of your file!", 255, 100, 100) 
+			tas.prompt("Example: $$/"..tas.registered_commands.load_record.." od3", 255, 100, 100) 
 			return 
 		end
 		
@@ -674,11 +739,11 @@ function tas.commands(cmd, ...)
 			
 			fileClose(load_file)
 			
-			tas.prompt("[TAS] ##File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
+			tas.prompt("File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
 			
 		else
 		
-			tas.prompt("[TAS] ##Loading record failed, file does not $$exist##!", 255, 100, 100) 
+			tas.prompt("Loading record failed, file does not $$exist##!", 255, 100, 100) 
 			return
 			
 		end
@@ -690,19 +755,19 @@ function tas.commands(cmd, ...)
 		
 		local status = (tas.settings.trigger_mapStart == true) and "ENABLED" or "DISABLED"
 		
-		tas.prompt("[TAS] ##Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
+		tas.prompt("Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
 	
 	-- // Clear all data.
 	elseif cmd == tas.registered_commands.clear_all then
 	
-		if tas.var.recording then tas.prompt("[TAS] ##Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
-		if tas.var.playbacking then tas.prompt("[TAS] ##Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
-		if #tas.data < 1 then tas.prompt("[TAS] ##Nothing to clear.", 255, 100, 100) return end
+		if tas.var.recording then tas.prompt("Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if #tas.data < 1 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
 			if #tas.data > 0 and not tas.timers.warnClear then
 				tas.timers.warnClear = setTimer(function() tas.timers.warnClear = nil end, 5000, 1)
-				tas.prompt("[TAS] ##Are you sure you want to $$clear ##everything? Use $$/"..tas.registered_commands.clear_all.." ##again to proceed.", 255, 100, 100)
+				tas.prompt("Are you sure you want to $$clear ##everything? Use $$/"..tas.registered_commands.clear_all.." ##again to proceed.", 255, 100, 100)
 				return 
 			end
 		end
@@ -712,43 +777,90 @@ function tas.commands(cmd, ...)
 		tas.data = {}
 		tas.warps = {}
 		
-		tas.prompt("[TAS] ##Cleared all data.", 255, 100, 255)
+		tas.prompt("Cleared all data.", 255, 100, 255)
 		
 	-- // Debugging
 	elseif cmd == tas.registered_commands.debug then
 	
-		tas.settings.debugging = not tas.settings.debugging
+		if args[1] == nil then tas.prompt("Syntax: $$/"..tas.registered_commands.debug.." [0-3]", 255, 100, 100) return end
 		
-		local status = (tas.settings.debugging == true) and "ENABLED" or "DISABLED"
+		local debug_number = tonumber(args[1])
 		
-		tas.prompt("[TAS] ##Debugging is now: $$".. tostring(status), 255, 100, 255)
+		if not debug_number then tas.prompt("Setting debug failed, syntax is: $$/"..tas.registered_commands.debug.." [0-3]", 255, 100, 100) return end
+		if debug_number > 3 then tas.prompt("Setting debug failed, levels are from $$0 ##to $$3 ##only!", 255, 100, 100) return end
+		
+		if debug_number == 1 then
+			tas.settings.debugging.offsetX = 60
+		elseif debug_number >= 2 then
+			tas.settings.debugging.offsetX = 120
+		end
+		
+		tas.settings.debugging.level = debug_number
+		
+		tas.prompt("Debugging level is now set to: $$".. tostring(debug_number), 255, 100, 255)
 		
 	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
-		tas.prompt("[TAS] ##Commands List:", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.resume.." $$| ##/"..tas.registered_commands.seek.." $$- ##resume $$| ##seek from a frame", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
-		tas.prompt("[TAS] ##/"..tas.registered_commands.debug.." $$- ##toggle debugging", 255, 100, 100)
+		tas.prompt("Commands List:", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.resume.." $$| ##/"..tas.registered_commands.seek.." $$- ##resume $$| ##seek from a frame", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.debug.." $$- ##toggle debugging", 255, 100, 100)
 	end
 end
 
+local fst = getTickCount()
+
 -- // Recording
-function tas.render_record()
+function tas.render_record(deltaTime)
 
 	local vehicle = tas.cveh(localPlayer)
 	
 	if vehicle then
 	
-		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
+		local total_frames = #tas.data
+	
+		local tick, p, r, v, rv, health, model, nos, keys, ground = tas.record_state(vehicle)
 		
-		if tas.data[#tas.data - 1] then
-			if tas.settings.captureFramerate and (tas.data[#tas.data - 1].tick + tas.settings.captureFramerate) > tick then return end
+		local previous_frame = tas.data[total_frames]
+		
+		if previous_frame then
+			
+			local half = 0.5
+			local fps_to_ms = math_floor(1000 / tas.var.fps)
+			
+			if deltaTime >= fps_to_ms *2 then
+
+				local x, y, z = unpack(p)
+				local x2, y2, z2 = unpack(previous_frame.p)
+				local segment_distance = tas.dist3D(x, y, z, x2, y2, z2)
+				iprint(segment_distance)
+				if segment_distance < 300 then
+				
+					local vx, vy, vz = unpack(previous_frame.v)
+					local kmh = (vx*vx + vy*vy + vz*vz) ^ half
+					
+					if kmh > 0 then
+					
+						tas.data[total_frames].tick = math_floor(previous_frame.tick + (segment_distance / kmh) * fps_to_ms)
+						tick = tas.data[total_frames].tick + fps_to_ms
+						
+						tas.var.record_tick = getTickCount() - tick
+						
+						if tas.settings.debugging.level >= 2 then
+							tas.data[total_frames].fixed = true
+							tas.prompt("Lag detected, rewriting previous ticks..", 255, 150, 0)
+						end
+					
+					end
+				end
+			end
+			
 		end
-		
+	
 		table_insert(tas.data, 	{
 									tick = tick,
 									p = p,
@@ -759,14 +871,62 @@ function tas.render_record()
 									m = model,
 									n = nos,
 									k = keys,
+									g = ground,
 								})
-	
+								
 	else
 	
-		removeEventHandler("onClientRender", root, tas.render_record)
+		removeEventHandler("onClientPreRender", root, tas.render_record)
 		tas.var.recording = false
 		
-		tas.prompt("[TAS] ##Recording stopped due to an error! ($$"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+		tas.prompt("Recording stopped due to an error! ($$"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+					
+	end
+end
+
+-- // Recording vehicle state
+function tas.record_state(vehicle, ped)
+
+	if vehicle then
+	
+		local current_tick = getTickCount()
+		local real_time = current_tick - tas.var.record_tick
+	
+		local p = {getElementPosition(vehicle)}
+		local r = {getElementRotation(vehicle)}
+		local v = {getElementVelocity(vehicle)}
+		local rv = {getElementAngularVelocity(vehicle)}
+		
+		local health = getElementHealth(vehicle)
+		local model = getElementModel(vehicle)
+		
+		local nos
+		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
+			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
+			if count and level then
+				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
+			end
+		end
+		
+		local keys = nil
+		for k in pairs(tas.registered_keys) do
+			if getKeyState(k) then
+				if not keys then keys = {} end
+				table_insert(keys, k)
+			end
+		end
+		
+		local ground = nil
+		if tas.settings.debugging.detectGround then
+			for i=0,3 do
+				if isVehicleWheelOnGround(vehicle, i) then
+					ground = true
+					break
+				end
+			end
+		end
+		
+		return real_time, p, r, v, rv, health, model, nos, keys, ground
 					
 	end
 end
@@ -779,7 +939,7 @@ function tas.render_playback()
 	if vehicle and not isPedDead(localPlayer) then
 	
 		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.start_tick) * tas.settings.playbackSpeed
+		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed
 		local inbetweening = 0
 
 		if tas.settings.playbackInterpolation then
@@ -813,7 +973,7 @@ function tas.render_playback()
 			end
 		end
 		
-		if tas.settings.debugging then
+		if tas.settings.debugging.level >= 2 then
 			dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
 			dxDrawText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
 			dxDrawText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
@@ -823,26 +983,30 @@ function tas.render_playback()
 		local frame_data = tas.data[tas.var.play_frame]
 		local frame_data_next = tas.data[tas.var.play_frame+1]
 		
-		local x = tas.lerp(frame_data.p[1], frame_data_next.p[1], inbetweening)
-		local y = tas.lerp(frame_data.p[2], frame_data_next.p[2], inbetweening)
-		local z = tas.lerp(frame_data.p[3], frame_data_next.p[3], inbetweening)
-		setElementPosition(vehicle, x, y, z)
+		if not tas.settings.useMacros then
 		
-		local rx = tas.lerp_angle(frame_data.r[1], frame_data_next.r[1], inbetweening)
-		local ry = tas.lerp_angle(frame_data.r[2], frame_data_next.r[2], inbetweening)
-		local rz = tas.lerp_angle(frame_data.r[3], frame_data_next.r[3], inbetweening)
-		setElementRotation(vehicle, rx, ry, rz)
-		
-		setElementVelocity(vehicle, unpack(frame_data.v))
-		setElementAngularVelocity(vehicle, unpack(frame_data.rv))
-		
-		if getElementModel(vehicle) ~= frame_data.m then
-			setElementModel(vehicle, frame_data.m)
-			triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+			local x = tas.lerp(frame_data.p[1], frame_data_next.p[1], inbetweening)
+			local y = tas.lerp(frame_data.p[2], frame_data_next.p[2], inbetweening)
+			local z = tas.lerp(frame_data.p[3], frame_data_next.p[3], inbetweening)
+			setElementPosition(vehicle, x, y, z)
+			
+			local rx = tas.lerp_angle(frame_data.r[1], frame_data_next.r[1], inbetweening)
+			local ry = tas.lerp_angle(frame_data.r[2], frame_data_next.r[2], inbetweening)
+			local rz = tas.lerp_angle(frame_data.r[3], frame_data_next.r[3], inbetweening)
+			setElementRotation(vehicle, rx, ry, rz)
+			
+			setElementVelocity(vehicle, unpack(frame_data.v))
+			setElementAngularVelocity(vehicle, unpack(frame_data.rv))
+			
+			if getElementModel(vehicle) ~= frame_data.m then
+				setElementModel(vehicle, frame_data.m)
+				triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+			end
+			setElementHealth(vehicle, frame_data.h)
+			
+			tas.nos(vehicle, frame_data.n)
+			
 		end
-		setElementHealth(vehicle, frame_data.h)
-		
-		tas.nos(vehicle, frame_data.n)
 		
 		tas.resetBinds()
 		if frame_data.k then
@@ -861,57 +1025,92 @@ function tas.render_playback()
 		tas.var.playbacking = false
 		tas.resetBinds()
 		
-		tas.prompt("[TAS] ##Playbacking stopped due to an error!", 255, 100, 100)
+		tas.prompt("Playbacking stopped due to an error!", 255, 100, 100)
 			
 	end
 end
 
--- // Recording vehicle state
-function tas.record_state(vehicle, ped)
-
-	if vehicle then
-	
-		local current_tick = getTickCount()
-		local real_time = current_tick - tas.var.difference_tick - tas.var.start_tick
-	
-		local p = {getElementPosition(vehicle)}
-		local r = {getElementRotation(vehicle)}
-		local v = {getElementVelocity(vehicle)}
-		local rv = {getElementAngularVelocity(vehicle)}
-		
-		local health = getElementHealth(vehicle)
-		local model = getElementModel(vehicle)
-		
-		local nos
-		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
-			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
-			if count and level then
-				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
-			end
-		end
-		
-		local keys = nil
-		for k in pairs(tas.registered_keys) do
-			if getKeyState(k) then
-				if not keys then keys = {} end
-				table_insert(keys, k)
-			end
-		end
-		
-		return real_time, p, r, v, rv, health, model, nos, keys
-					
-	end
-end
+local screenW, screenH = guiGetScreenSize()
 
 -- // Drawing debug
 function tas.dxDebug()
-	if tas.settings.debugging then
-		for i=1, #tas.data do
-			local x, y, z = unpack(tas.data[i].p)
-			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(255, 0, 0, 100), 5)
-		end
+
+	local offsetX = tas.settings.debugging.offsetX
+	
+	if tas.settings.debugging.level >= 1 then
+		
+		tas.dxKey("W", screenW/2-offsetX, screenH-200, 40, 40, getPedControlState(localPlayer, "accelerate") and tocolor(60, 255, 60, 255))
+		tas.dxKey("S", screenW/2-offsetX, screenH-200+44, 40, 40, getPedControlState(localPlayer, "brake_reverse") and tocolor(255, 150, 50, 255))
+		tas.dxKey("A", screenW/2-offsetX-44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_left") and tocolor(220, 220, 50, 255))
+		tas.dxKey("D", screenW/2-offsetX+44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_right") and tocolor(220, 220, 50, 255))
+		tas.dxKey("FIRE", screenW/2-offsetX-64, screenH-200+88, 60, 40, (getPedControlState(localPlayer, "vehicle_fire") or getPedControlState(localPlayer, "vehicle_secondary_fire")) and tocolor(60, 200, 255, 255))
+		tas.dxKey("SPACE", screenW/2-offsetX, screenH-200+88, 160, 40, getPedControlState(localPlayer, "handbrake") and tocolor(255, 60, 60, 255))
+		tas.dxKey("ᐱ", screenW/2-offsetX+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
+		tas.dxKey("ᐯ", screenW/2-offsetX+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
+		
+	end
+	
+	if tas.settings.debugging.level >= 2 then
+		tas.dxText("Recording: ".. (tas.var.recording == true and "#00FF00ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. ((tas.timers.loading_warp == true and "(LOADING WARP..)") or (tas.timers.resume_load == true and "(RESUMING..)") or ""), screenW/2-offsetX+170, screenH-200, 0, 0, 1)
+		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#00FF00ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18, 0, 0, 1)
+		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
+		tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		
+		tas.pathWay()
 	end
 end
+
+function tas.pathWay()
+
+	if tas.settings.debugging.level == 2 then
+	
+		for i=2, #tas.data do
+			local x, y, z = unpack(tas.data[i].p)
+			local x2, y2, z2 = unpack(tas.data[i-1].p)
+			local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+			
+			dxDrawLine3D(x, y, z, x2, y2, z2, ground, 5)
+		end
+		
+	elseif tas.settings.debugging.level == 3 then
+	
+		for i=2, #tas.data do
+			local x, y, z = unpack(tas.data[i].p)
+			local vx, vy, vz = unpack(tas.data[i].v)
+			local fixed = (tas.data[i].fixed == true and tocolor(0, 255, 0, 255)) or tocolor(255, 0, 0, 255)
+			dxDrawLine3D(x, y, z-1, x, y, z+1, fixed, 5)
+			
+			local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
+			if swX and swY then
+				dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, fixed, 1, "arial", "center", "center")
+			end
+			
+			dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
+			local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.1, 2)
+			if swX and swY then
+				dxDrawText(tas.dist2D(0, 0, 0, vx, vy, vz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+			end
+		end
+		
+	end
+	
+end
+
+function tas.dxKey(keyName, x, y, x2, y2, color)
+	dxDrawRectangle(x, y, x2, y2, color or tocolor(200, 200, 200, 200))
+	dxDrawText(keyName, x, y, x+x2, y+y2, tocolor(0, 0, 0, 255), 1.384, "default-bold", "center", "center")
+end
+
+function tas.dxText(text, x, y, x2, y2, size)
+	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x2+1, y2+1, tocolor(0,0,0,255), size, "default", "left", "top", false, false, false, true)
+	dxDrawText(text, x, y, x2, y2, tocolor(255,255,255,255), size, "default", "left", "top", false, false, false, true)
+end
+
+
+-- // Update FPS variable while recording
+addDebugHook("postFunction", function(_, _, _, _, _, fps)
+    tas.var.fps = fps
+end, {"setFPSLimit"})
 
 -- // Resetting ped controls
 function tas.resetBinds()
@@ -923,7 +1122,7 @@ end
 -- // Command messages
 function tas.prompt(text, r, g, b)
 	if type(text) ~= "string" then return end
-	return outputChatBox(string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string.format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
+	return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string.format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
 end
 
 -- // Useful
@@ -951,7 +1150,7 @@ function tas.lerp_angle(start_angle, end_angle, progress)
     return math_deg(angle)
 end
 
--- // Nitro detection and modify stats
+-- // Nitro detection and modify stats (playback and load warp)
 function tas.nos(vehicle, data)
 	if vehicle then
 		local nos_upgrade = getVehicleUpgradeOnSlot(vehicle, 8)
@@ -993,7 +1192,44 @@ function tas.float(number)
 	return math_floor( number * 1000 ) * 0.001
 end
 
+-- // Calculate distance 2D (faster than the mta func)
+function tas.dist2D(x, y, x2, y2)
+	return ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y)) ^ 0.5
+end
+
+-- // Calculate distance 3D (faster than the mta func)
+function tas.dist3D(x, y, z, x2, y2, z2)
+	return ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y) + (z2 - z) * (z2 - z)) ^ 0.5
+end
+
 -- // Wrapper for tocolor
 function tocolor(r, g, b, a)
 	return b + g * 256 + r * 256 * 256 + (a or 255) * 256 * 256 * 256
 end
+
+--[[
+addCommandHandler("fixtas", function(cmd, ...)
+	local args = {...}
+	local tk, dif = tonumber(args[1]), tonumber(args[2])
+	
+	if not dif then
+		if tas.data[tk] then
+			iprint(tas.data[tk].tick)
+			iprint(tas.data[tk])
+		end
+	else
+		for i=tk, #tas.data do
+			tas.data[i].tick = tas.data[i].tick + dif
+		end
+	end
+end)
+
+addCommandHandler("calc", function(cmd, ...)
+	local a,s,d = unpack({ -1310.8272705078, -187.67544555664, 13.875532150269 })
+	local f,g,h = unpack({ -1311.7077636719, -186.78118896484, 13.875561714172 })
+
+	
+	iprint(tas.dist3D(a,s,d,f,g,h))
+end)
+
+]]
