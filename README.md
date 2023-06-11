@@ -4,7 +4,9 @@
 ### by chris1384 @2020
 
 This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstration purposes.
+
 Back in 2020, I've worked on a script that undos the whole run you've made if you did a mistake. I've always been dreaming about getting TAS scripts working with MTA:SA, but due to RenderWare random movement and calculations, the only way to make this sort of tool was to record every frame in real time, which manually adding inputs to a file was impossible.
+
 It is a complete remake over the old one. It might have a better overall performance, but that depends on the users gear.
 
 ## Here's a list of what the tool is capable of:
@@ -42,7 +44,7 @@ It is a complete remake over the old one. It might have a better overall perform
 /playback - start playbacking the run you've recorded
 /switchr - switch between regular and frame-by-frame recording
 /rsw - save warp
-/rlw - load latest warp
+/rlw [ID] - load warp
 /rdw - delete latest warp
 /nf [frames] - set next frame while frame-by-frame recording
 /pf - delete the latest frame while frame-by-frame recording
@@ -53,7 +55,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 /loadr [name] - load an existing run
 /autotas - toggle Auto-TAS (trigger record or playback on map start)
 /clearall - clear all data
-/debugr - toggle debugging
+/debugr [level] - toggle debugging
 ```
 
 ### 3. Using the tool (example)
@@ -68,5 +70,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 ***Where are my saved runs?***
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
+- This option can be changed in version 1.4.
 
-## For any help, please contact me on Discord: *chrisu#9616* or on MTA:SA forums (chris1384).
+## Something you would want implemented or got any bugs? Fill out a form in the Issues section!
+## For any additional help, please contact me on Discord: *chrisu#9616* or on MTA:SA forums (chris1384).
