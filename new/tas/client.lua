@@ -7,7 +7,7 @@
 local tas = {
 	-- // hardcoded variables, do not edit
 	var = 	{
-		record_tick = 0, -- used to store frame ticks for smooth playback
+		record_tick = 0, -- used to store frame ticks for smooth playback. it's associated with
 		tick_1 = 0, -- last frame tick
 		tick_2 = 0, -- next frame tick (used for interpolation)
 		play_frame = 1, -- used for table indexing
@@ -31,7 +31,7 @@ local tas = {
 	
 	settings = 	{
 		startPrompt = true, -- show resource initialization text on startup
-		promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
+		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
 		-- // General
 		trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead
@@ -59,8 +59,8 @@ local tas = {
 		precautiousRecording = true, 
 		--[[ 
 			~STILL NEEDS TESTING~
-			CURRENT BUGS: tick can return -nan(ind) or negative values, the function can end up in a loop or it might screw up teleportation scripts.
-			use the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
+			CURRENT BUGS: tick can return -nan(ind) or negative values, the function can end up in a loop, might screw up teleportation scripts, warp timer may interfere.
+			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
 			DO NOT RECORD WITH FPS HIGHER THAN 51, IT CAN CAUSE MASSIVE BUGS!!!
 			
 		]]
@@ -94,7 +94,7 @@ local tas = {
 			]]
 			offsetX = 0, -- offset for hud
 			
-			detectGround = true, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
+			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
 	},
 	timers = {}, -- warp load, resume timer, warning timers etc.
@@ -348,16 +348,16 @@ function tas.commands(cmd, ...)
 		end
 		
 		table_insert(tas.warps, {
-									frame = #tas.data,
-									tick = tick,
-									p = p,
-									r = r,
-									v = v,
-									rv = rv,
-									h = health,
-									m = model,
-									n = nos,
-								})
+			frame = #tas.data,
+			tick = tick,
+			p = p,
+			r = r,
+			v = v,
+			rv = rv,
+			h = health,
+			m = model,
+			n = nos,
+		})
 								
 		tas.prompt("Warp $$#"..tostring(#tas.warps).." ##saved!", 60, 180, 255)
 		
@@ -418,24 +418,24 @@ function tas.commands(cmd, ...)
 		
 		tas.timers.load_warp = 	setTimer(function()
 		
-									setElementFrozen(vehicle, false)
-									
-									setElementVelocity(vehicle, unpack(w_data.v))
-									setElementAngularVelocity(vehicle, unpack(w_data.rv))
-									
-									setElementHealth(vehicle, w_data.h)
+			setElementFrozen(vehicle, false)
+			
+			setElementVelocity(vehicle, unpack(w_data.v))
+			setElementAngularVelocity(vehicle, unpack(w_data.rv))
+			
+			setElementHealth(vehicle, w_data.h)
 		
-									tas.nos(vehicle, w_data.n)
-									
-									if tas.var.recording then
-										tas.var.record_tick = getTickCount() - w_data.tick
-										addEventHandler("onClientPreRender", root, tas.render_record)
-									end
-									
-									tas.timers.load_warp = nil
-									tas.var.loading_warp = false
-									
-								end, tas.settings.warpResume, 1)
+			tas.nos(vehicle, w_data.n)
+			
+			if tas.var.recording then
+				tas.var.record_tick = getTickCount() - w_data.tick
+				addEventHandler("onClientPreRender", root, tas.render_record)
+			end
+			
+			tas.timers.load_warp = nil
+			tas.var.loading_warp = false
+			
+		end, tas.settings.warpResume, 1)
 								
 		tas.prompt("Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
 		
@@ -493,23 +493,23 @@ function tas.commands(cmd, ...)
 		
 		tas.timers.resume_load = setTimer(function()
 		
-									setElementFrozen(vehicle, false)
+			setElementFrozen(vehicle, false)
+			
+			setElementVelocity(vehicle, unpack(resume_data.v))
+			setElementAngularVelocity(vehicle, unpack(resume_data.rv))
+			
+			setElementHealth(vehicle, resume_data.h)
+			
+			tas.nos(vehicle, resume_data.n)
+			
+			addEventHandler("onClientPreRender", root, tas.render_record)
+			tas.var.recording = true
+			
+			tas.var.record_tick = getTickCount() - resume_data.tick
+			
+			tas.timers.resume_load = nil
 									
-									setElementVelocity(vehicle, unpack(resume_data.v))
-									setElementAngularVelocity(vehicle, unpack(resume_data.rv))
-									
-									setElementHealth(vehicle, resume_data.h)
-		
-									tas.nos(vehicle, resume_data.n)
-									
-									addEventHandler("onClientPreRender", root, tas.render_record)
-									tas.var.recording = true
-									
-									tas.var.record_tick = getTickCount() - resume_data.tick
-									
-									tas.timers.resume_load = nil
-									
-								end, tas.settings.warpResume, 1)
+		end, tas.settings.warpResume, 1)
 		
 		tas.prompt("Resumed from frame $$#"..resume_number.."##. Recording frames..", 100, 255, 100)
 		
@@ -827,17 +827,17 @@ function tas.render_record(deltaTime)
 		
 		local previous_frame = tas.data[total_frames]
 		
-		if previous_frame then
+		if previous_frame and tas.settings.precautiousRecording then
 			
 			local half = 0.5
 			local fps_to_ms = math_floor(1000 / tas.var.fps)
 			
-			if deltaTime >= fps_to_ms *2 then
+			if deltaTime >= fps_to_ms * 2 then
 
 				local x, y, z = unpack(p)
 				local x2, y2, z2 = unpack(previous_frame.p)
 				local segment_distance = tas.dist3D(x, y, z, x2, y2, z2)
-				iprint(segment_distance)
+
 				if segment_distance < 300 then
 				
 					local vx, vy, vz = unpack(previous_frame.v)
@@ -862,17 +862,17 @@ function tas.render_record(deltaTime)
 		end
 	
 		table_insert(tas.data, 	{
-									tick = tick,
-									p = p,
-									r = r,
-									v = v,
-									rv = rv,
-									h = health,
-									m = model,
-									n = nos,
-									k = keys,
-									g = ground,
-								})
+			tick = tick,
+			p = p,
+			r = r,
+			v = v,
+			rv = rv,
+			h = health,
+			m = model,
+			n = nos,
+			k = keys,
+			g = ground,
+		})
 								
 	else
 	
@@ -939,7 +939,7 @@ function tas.render_playback()
 	if vehicle and not isPedDead(localPlayer) then
 	
 		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed
+		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed -- this doesn't even work wtf
 		local inbetweening = 0
 
 		if tas.settings.playbackInterpolation then
@@ -971,13 +971,6 @@ function tas.render_playback()
 					return
 				end
 			end
-		end
-		
-		if tas.settings.debugging.level >= 2 then
-			dxDrawText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
-			dxDrawText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
-			dxDrawText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
-			dxDrawText("Inbetween: "..tostring(inbetweening), 600, 160, 0, 0)
 		end
 		
 		local frame_data = tas.data[tas.var.play_frame]
@@ -1051,10 +1044,16 @@ function tas.dxDebug()
 	end
 	
 	if tas.settings.debugging.level >= 2 then
+	
 		tas.dxText("Recording: ".. (tas.var.recording == true and "#00FF00ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. ((tas.timers.loading_warp == true and "(LOADING WARP..)") or (tas.timers.resume_load == true and "(RESUMING..)") or ""), screenW/2-offsetX+170, screenH-200, 0, 0, 1)
 		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#00FF00ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18, 0, 0, 1)
 		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
 		tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		
+		tas.dxText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
+		tas.dxText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
+		tas.dxText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
+		tas.dxText("Inbetween: "..tostring(inbetweening), 600, 160, 0, 0)
 		
 		tas.pathWay()
 	end
@@ -1096,16 +1095,17 @@ function tas.pathWay()
 	
 end
 
+-- // Cute dxKeybind
 function tas.dxKey(keyName, x, y, x2, y2, color)
 	dxDrawRectangle(x, y, x2, y2, color or tocolor(200, 200, 200, 200))
 	dxDrawText(keyName, x, y, x+x2, y+y2, tocolor(0, 0, 0, 255), 1.384, "default-bold", "center", "center")
 end
 
+-- // Cute dxText
 function tas.dxText(text, x, y, x2, y2, size)
 	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x2+1, y2+1, tocolor(0,0,0,255), size, "default", "left", "top", false, false, false, true)
 	dxDrawText(text, x, y, x2, y2, tocolor(255,255,255,255), size, "default", "left", "top", false, false, false, true)
 end
-
 
 -- // Update FPS variable while recording
 addDebugHook("postFunction", function(_, _, _, _, _, fps)
@@ -1122,7 +1122,7 @@ end
 -- // Command messages
 function tas.prompt(text, r, g, b)
 	if type(text) ~= "string" then return end
-	return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string.format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
+	return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
 end
 
 -- // Useful
@@ -1206,30 +1206,3 @@ end
 function tocolor(r, g, b, a)
 	return b + g * 256 + r * 256 * 256 + (a or 255) * 256 * 256 * 256
 end
-
---[[
-addCommandHandler("fixtas", function(cmd, ...)
-	local args = {...}
-	local tk, dif = tonumber(args[1]), tonumber(args[2])
-	
-	if not dif then
-		if tas.data[tk] then
-			iprint(tas.data[tk].tick)
-			iprint(tas.data[tk])
-		end
-	else
-		for i=tk, #tas.data do
-			tas.data[i].tick = tas.data[i].tick + dif
-		end
-	end
-end)
-
-addCommandHandler("calc", function(cmd, ...)
-	local a,s,d = unpack({ -1310.8272705078, -187.67544555664, 13.875532150269 })
-	local f,g,h = unpack({ -1311.7077636719, -186.78118896484, 13.875561714172 })
-
-	
-	iprint(tas.dist3D(a,s,d,f,g,h))
-end)
-
-]]
