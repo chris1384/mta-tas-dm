@@ -73,4 +73,4 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - This option can be changed in version 1.4.
 
 ## Something you would want implemented or got any bugs? Fill out a form in the Issues section!
-## For any additional help, please contact me on Discord: *chrisu#9616* or on MTA:SA forums (chris1384).
+## For any additional help, please contact me on Discord: *chrisu#9616* (or just chris1384) or on MTA:SA forums (chris1384).
