@@ -10,7 +10,7 @@ local tas = {
 		record_tick = 0, -- used to store frame ticks for smooth playback. it's associated with
 		tick_1 = 0, -- last frame tick
 		tick_2 = 0, -- next frame tick (used for interpolation)
-		play_frame = 1, -- used for table indexing
+		play_frame = 0, -- used for table indexing
 		
 		recording = false,
 		recording_fbf = false, -- [UNUSED]
@@ -47,7 +47,8 @@ local tas = {
 		-- //
 		
 		-- // Warp Settings
-		warpResume = 500, -- time until the vehicle resumes from loading a warp
+		warpDelay = 500, -- time until the vehicle resumes from loading a warp
+		resumeDelay = 1500, -- time until the vehicle resumes from the resume command
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
@@ -260,6 +261,22 @@ end
 addEvent("tas:triggerCommand", true)
 addEventHandler("tas:triggerCommand", root, tas.raceWrap)
 
+-- // Update FPS variable while recording
+function tas.changeFPSEvent(_, _, _, _, _, fps)
+    tas.var.fps = fps
+end
+addDebugHook("postFunction", tas.changeFPSEvent, {"setFPSLimit"})
+
+-- // Another cancellation event
+function tas.minimizeEvent()
+	if tas.var.recording then
+		removeEventHandler("onClientPreRender", root, tas.render_record)
+		tas.var.recording = false
+		tas.prompt("Recording stopped due to the minimize event! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+	end
+end
+addEventHandler("onClientMinimize", root, tas.minimizeEvent)
+
 -- // Event Commands
 function tas.commands(cmd, ...) 
 
@@ -298,7 +315,7 @@ function tas.commands(cmd, ...)
 			removeEventHandler("onClientPreRender", root, tas.render_record)
 			tas.var.recording = false
 			
-			tas.prompt("Recording stopped! ($$"..tostring(#tas.data).." ##frames)", 100, 255, 100)
+			tas.prompt("Recording stopped! ($$#"..tostring(#tas.data).." ##frames)", 100, 255, 100)
 		else
 			tas.data = {}
 			
@@ -349,6 +366,7 @@ function tas.commands(cmd, ...)
 	
 		if not vehicle then tas.prompt("Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if tas.var.loading_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Saving warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
 		local frame = #tas.data
@@ -445,7 +463,7 @@ function tas.commands(cmd, ...)
 			tas.timers.load_warp = nil
 			tas.var.loading_warp = false
 			
-		end, tas.settings.warpResume, 1)
+		end, tas.settings.warpDelay, 1)
 								
 		tas.prompt("Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
 		
@@ -519,7 +537,7 @@ function tas.commands(cmd, ...)
 			
 			tas.timers.resume_load = nil
 									
-		end, tas.settings.warpResume, 1)
+		end, tas.settings.resumeDelay, 1)
 		
 		tas.prompt("Resumed from frame $$#"..resume_number.."##. Recording frames..", 100, 255, 100)
 		
@@ -545,7 +563,9 @@ function tas.commands(cmd, ...)
 		end
 		
 		tas.var.play_frame = seek_number
-		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick) * tas.settings.playbackSpeed
+		tas.var.tick_1 = tas.data[tas.var.play_frame].tick
+		tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
+		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick / tas.settings.playbackSpeed)
 		
 		if tas.settings.useMacros then
 			setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
@@ -639,6 +659,11 @@ function tas.commands(cmd, ...)
 	-- // Load Recording
 	elseif cmd == tas.registered_commands.load_record then
 	
+		if tas.var.recording then tas.prompt("Loading record failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Loading record failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.load_warp then tas.prompt("Loading record failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Loading record failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 	
@@ -772,6 +797,8 @@ function tas.commands(cmd, ...)
 	
 		if tas.var.recording then tas.prompt("Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.load_warp then tas.prompt("Clearing all data failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Clearing all data failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
 		if #tas.data == 0 and #tas.warps == 0 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
@@ -809,8 +836,14 @@ function tas.commands(cmd, ...)
 		
 		tas.prompt("Debugging level is now set to: $$".. tostring(debug_number), 255, 100, 255)
 		
+	-- // Change settings
 	elseif cmd == tas.registered_commands.cvar then
 	
+		if tas.var.recording then tas.prompt("Setting cvar failed, stop $$recording ##first!", 255, 100, 100) return end
+		if tas.var.playbacking then tas.prompt("Setting cvar failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.timers.load_warp then tas.prompt("Setting cvar failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if tas.timers.resume_load then tas.prompt("Setting cvar failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		
 		local value_type = args[1]
 		local key = args[2]
 		local value = args[3]
@@ -926,7 +959,7 @@ function tas.render_record(deltaTime)
 		removeEventHandler("onClientPreRender", root, tas.render_record)
 		tas.var.recording = false
 		
-		tas.prompt("Recording stopped due to an error! ($$"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+		tas.prompt("Recording stopped due to an error! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
 					
 	end
 end
@@ -986,7 +1019,7 @@ function tas.render_playback()
 	if vehicle and not isPedDead(localPlayer) then
 	
 		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed -- this doesn't even work wtf
+		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed
 		local inbetweening = 0
 
 		if tas.settings.playbackInterpolation then
@@ -1092,10 +1125,14 @@ function tas.dxDebug()
 	
 	if tas.settings.debugging.level >= 2 then
 	
-		tas.dxText("Recording: ".. (tas.var.recording == true and "#00FF00ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. ((tas.timers.loading_warp == true and "(LOADING WARP..)") or (tas.timers.resume_load == true and "(RESUMING..)") or ""), screenW/2-offsetX+170, screenH-200, 0, 0, 1)
-		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#00FF00ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18, 0, 0, 1)
+		local recording_extra = (tas.timers.load_warp ~= nil and "(LOADING WARP..)") or (tas.timers.resume_load ~= nil and "(RESUMING..)") or ""
+	
+		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200, 0, 0, 1)
+		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18, 0, 0, 1)
+		
 		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
 		tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame), screenW/2-offsetX+170, screenH-200+18*5, 0, 0, 1)
 		
 		tas.pathWay()
 	end
@@ -1168,11 +1205,6 @@ function tas.dxText(text, x, y, x2, y2, size)
 	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x2+1, y2+1, tocolor(0,0,0,255), size, "default", "left", "top", false, false, false, true)
 	dxDrawText(text, x, y, x2, y2, tocolor(255,255,255,255), size, "default", "left", "top", false, false, false, true)
 end
-
--- // Update FPS variable while recording
-addDebugHook("postFunction", function(_, _, _, _, _, fps)
-    tas.var.fps = fps
-end, {"setFPSLimit"})
 
 -- // Resetting ped controls
 function tas.resetBinds()
