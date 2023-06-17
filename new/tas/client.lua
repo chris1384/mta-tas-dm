@@ -67,6 +67,13 @@ local tas = {
 		-- //
 		
 		-- // Playback Settings
+		playbackPreRender = false, 
+		--[[
+			use the preRender event instead of the regular one. this can affect the position of a vehicle whenever it's intersecting with an object at high speed.
+			by setting this to true, you can essentially avoid any extra movement at the final frame, meaning what has been recorded previously, will be played back without any imperfections. 
+			this should be considered as experimental.
+		]]
+		
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
 		playbackSpeed = 1, -- change playback speed
 		
@@ -94,6 +101,8 @@ local tas = {
 			]]
 			offsetX = 0, -- offset for hud
 			
+			frameSkipping = 15, -- optimize the pathway when you're not playbacking
+			
 			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
 	},
@@ -118,6 +127,7 @@ tas.registered_commands = {
 	debug = "debugr",
 	autotas = "autotas",
 	clear_all = "clearall",
+	cvar = "tascvar",
 	help = "tashelp",
 }
 
@@ -762,7 +772,7 @@ function tas.commands(cmd, ...)
 	
 		if tas.var.recording then tas.prompt("Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
-		if #tas.data < 1 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
+		if #tas.data == 0 and #tas.warps == 0 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
 			if #tas.data > 0 and not tas.timers.warnClear then
@@ -799,6 +809,45 @@ function tas.commands(cmd, ...)
 		
 		tas.prompt("Debugging level is now set to: $$".. tostring(debug_number), 255, 100, 255)
 		
+	elseif cmd == tas.registered_commands.cvar then
+	
+		local value_type = args[1]
+		local key = args[2]
+		local value = args[3]
+		
+		if not value_type then tas.prompt("Setting cvar failed, syntax is: $$/"..tas.registered_commands.cvar.." type key value", 255, 100, 100) return end 
+		
+		if not key and value_type == "show" then
+			for k,v in pairs(tas.settings) do
+				if type(v) ~= "table" then
+					tas.prompt(tostring(k).. ": "..tostring(v), 255, 100, 255)
+				end
+			end
+			return
+		end
+		
+		if key and value then
+		
+			if value_type == "number" then
+				value = tonumber(value)
+			elseif value_type == "bool" then
+				value = (value == "true")
+			elseif value_type == "string" then
+				value = tostring(value)
+			end
+			
+			if tas.settings[key] then
+				tas.settings[key] = value
+				tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
+			else
+				tas.prompt("Setting cvar failed, setting key does not exist!", 255, 100, 100) 
+				return
+			end
+		else
+			tas.prompt("Setting cvar failed, missing arguments (key, value)!", 255, 100, 100) 
+			return
+		end
+		
 	-- // Show Help
 	elseif cmd == tas.registered_commands.help then
 		tas.prompt("Commands List:", 255, 100, 100)
@@ -811,8 +860,6 @@ function tas.commands(cmd, ...)
 		tas.prompt("/"..tas.registered_commands.debug.." $$- ##toggle debugging", 255, 100, 100)
 	end
 end
-
-local fst = getTickCount()
 
 -- // Recording
 function tas.render_record(deltaTime)
@@ -830,9 +877,9 @@ function tas.render_record(deltaTime)
 		if previous_frame and tas.settings.precautiousRecording then
 			
 			local half = 0.5
-			local fps_to_ms = math_floor(1000 / tas.var.fps)
+			local fps_to_ms = math_ceil(1000 / tas.var.fps)
 			
-			if deltaTime >= fps_to_ms * 2 then
+			if deltaTime >= fps_to_ms * 1.5 then
 
 				local x, y, z = unpack(p)
 				local x2, y2, z2 = unpack(previous_frame.p)
@@ -841,11 +888,11 @@ function tas.render_record(deltaTime)
 				if segment_distance < 300 then
 				
 					local vx, vy, vz = unpack(previous_frame.v)
-					local kmh = (vx*vx + vy*vy + vz*vz) ^ half
+					local kmh = tas.dist3D(0, 0, 0, vx, vy, vz)
 					
 					if kmh > 0 then
 					
-						tas.data[total_frames].tick = math_floor(previous_frame.tick + (segment_distance / kmh) * fps_to_ms)
+						tas.data[total_frames].tick = math_ceil(previous_frame.tick - fps_to_ms + (segment_distance / kmh) * fps_to_ms)
 						tick = tas.data[total_frames].tick + fps_to_ms
 						
 						tas.var.record_tick = getTickCount() - tick
@@ -1050,11 +1097,6 @@ function tas.dxDebug()
 		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
 		tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
 		
-		tas.dxText("Total Frames: "..tostring(#tas.data), 600, 100, 0, 0)
-		tas.dxText("Current Tick: "..tostring(current_tick).." | Real Time Tick: "..tostring(real_time), 600, 120, 0, 0)
-		tas.dxText("Current Playback Frame: "..tostring(tas.var.play_frame).." | Last Tick: "..tostring(tas.var.tick_1).." | Upcoming Tick: "..tostring(tas.var.tick_2), 600, 140, 0, 0)
-		tas.dxText("Inbetween: "..tostring(inbetweening), 600, 160, 0, 0)
-		
 		tas.pathWay()
 	end
 end
@@ -1063,17 +1105,23 @@ function tas.pathWay()
 
 	if tas.settings.debugging.level == 2 then
 	
-		for i=2, #tas.data do
-			local x, y, z = unpack(tas.data[i].p)
-			local x2, y2, z2 = unpack(tas.data[i-1].p)
-			local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
-			
-			dxDrawLine3D(x, y, z, x2, y2, z2, ground, 5)
+		local frameSkipping = (tas.var.playbacking == true and 1) or tas.settings.debugging.frameSkipping
+		local startFrame = (tas.var.playbacking == true and tas.var.play_frame + 2) or 1
+		local endFrame = (tas.var.playbacking == false and #tas.data - frameSkipping - 1) or math.min(tas.var.play_frame + tas.var.fps * 2, #tas.data - frameSkipping - 1)
+		
+		for i = startFrame, endFrame, frameSkipping do
+			if tas.data[i] and tas.data[endFrame] then
+				local x, y, z = unpack(tas.data[i].p)
+				local x2, y2, z2 = unpack(tas.data[i + frameSkipping].p)
+				local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+				
+				dxDrawLine3D(x, y, z, x2, y2, z2, ground, 5)
+			end
 		end
 		
 	elseif tas.settings.debugging.level == 3 then
 	
-		for i=2, #tas.data do
+		for i=2, #tas.data - 1 do
 			local x, y, z = unpack(tas.data[i].p)
 			local vx, vy, vz = unpack(tas.data[i].v)
 			local fixed = (tas.data[i].fixed == true and tocolor(0, 255, 0, 255)) or tocolor(255, 0, 0, 255)
@@ -1087,7 +1135,21 @@ function tas.pathWay()
 			dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
 			local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.1, 2)
 			if swX and swY then
-				dxDrawText(tas.dist2D(0, 0, 0, vx, vy, vz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+				dxDrawText(tas.dist3D(0, 0, 0, vx, vy, vz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+			end
+			
+			local nx, ny, nz = unpack(tas.data[i+1].p)
+			
+			local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
+			local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
+			if swX and swY then
+				dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+			end
+			
+			dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
+			local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
+			if swX and swY then
+				dxDrawText(tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 255, 255), 1, "arial", "center", "center")
 			end
 		end
 		
@@ -1135,19 +1197,10 @@ function tas.clamp(st, v, fn)
 	return math_max(st, math_min(v, fn))
 end
 
--- // thanks chatgpt XD (CsaWee knows)
-function tas.lerp_angle(start_angle, end_angle, progress)
-    local start_angle = math_rad(start_angle)
-    local end_angle = math_rad(end_angle)
-    if math_abs(end_angle - start_angle) > math_pi then
-        if end_angle > start_angle then
-            start_angle = start_angle + 2*math_pi
-        else
-            end_angle = end_angle + 2*math_pi
-        end
-    end
-    local angle = (1 - progress) * start_angle + progress * end_angle
-    return math_deg(angle)
+-- // Lerp angle
+function tas.lerp_angle(st, nd, prog)
+	local delta = (nd - st + 180) % 360 - 180
+	return (st + delta * prog) % 360
 end
 
 -- // Nitro detection and modify stats (playback and load warp)
@@ -1200,6 +1253,11 @@ end
 -- // Calculate distance 3D (faster than the mta func)
 function tas.dist3D(x, y, z, x2, y2, z2)
 	return ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y) + (z2 - z) * (z2 - z)) ^ 0.5
+end
+
+-- // Get middle x, y ,z of a segment
+function tas.middle3D(x, y, z, x2, y2, z2)
+	return (x + x2)*0.5, (y + y2)*0.5, (z + z2)*0.5
 end
 
 -- // Wrapper for tocolor
