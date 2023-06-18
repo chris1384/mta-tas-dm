@@ -7,7 +7,7 @@
 local tas = {
 	-- // hardcoded variables, do not edit
 	var = 	{
-		record_tick = 0, -- used to store frame ticks for smooth playback. it's associated with
+		record_tick = 0, -- used to store frame ticks for smooth playback. it's associated with 'playbackInterpolation'
 		tick_1 = 0, -- last frame tick
 		tick_2 = 0, -- next frame tick (used for interpolation)
 		play_frame = 0, -- used for table indexing
@@ -30,10 +30,10 @@ local tas = {
 	entities = {}, -- [UNUSED]
 	
 	settings = 	{
+		-- // General
 		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
-		-- // General
 		trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead
 		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 		
@@ -46,9 +46,11 @@ local tas = {
 		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
 		-- //
 		
+		
 		-- // Warp Settings
 		warpDelay = 500, -- time until the vehicle resumes from loading a warp
 		resumeDelay = 1500, -- time until the vehicle resumes from the resume command
+		rewindingDelay = 0, -- [UNUSED] time until the vehicle resumes from rewinding
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
@@ -63,16 +65,16 @@ local tas = {
 			CURRENT BUGS: tick can return -nan(ind) or negative values, the function can end up in a loop, might screw up teleportation scripts, warp timer may interfere.
 			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
 			DO NOT RECORD WITH FPS HIGHER THAN 51, IT CAN CAUSE MASSIVE BUGS!!!
-			
 		]]
 		-- //
+		
 		
 		-- // Playback Settings
 		playbackPreRender = false, 
 		--[[
 			use the preRender event instead of the regular one. this can affect the position of a vehicle whenever it's intersecting with an object at high speed.
 			by setting this to true, you can essentially avoid any extra movement at the final frame, meaning what has been recorded previously, will be played back without any imperfections. 
-			this should be considered as experimental.
+			unfortunately, ped position rendering is done in a separate processing order and might look out of place when playbacking.
 		]]
 		
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
@@ -88,7 +90,10 @@ local tas = {
 			keep in mind that any lagspike can severely affect the playback. for that, use adaptiveInterpolation. [UNUSED]
 			not recommended while showcasing maps and it's mainly used for debugging
 		]]
+		
+		allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
 		-- //
+		
 		
 		-- // Debugging Settings
 		debugging = {
@@ -106,6 +111,8 @@ local tas = {
 			
 			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
+		-- //
+		
 	},
 	timers = {}, -- warp load, resume timer, warning timers etc.
 }
@@ -340,13 +347,13 @@ function tas.commands(cmd, ...)
 		if tas.timers.resume_load then tas.prompt("Playbacking failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		if tas.var.playbacking then
-			removeEventHandler("onClientRender", root, tas.render_playback)
+			removeEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 			tas.var.playbacking = false
 			tas.resetBinds()
 			
 			tas.prompt("Playbacking stopped!", 100, 100, 255)
 		else
-			addEventHandler("onClientRender", root, tas.render_playback)
+			addEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 			tas.var.playbacking = true
 			tas.var.play_frame = 1
 			tas.var.record_tick = getTickCount()
@@ -559,7 +566,7 @@ function tas.commands(cmd, ...)
 		
 		if not tas.var.playbacking then
 			tas.var.playbacking = true
-			addEventHandler("onClientRender", root, tas.render_playback)
+			addEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 		end
 		
 		tas.var.play_frame = seek_number
@@ -645,7 +652,10 @@ function tas.commands(cmd, ...)
 						nos = tostring(warp.n.c)..","..tostring(tas.float(warp.n.l))..",".. active
 					end
 					
-					fileWrite(save_file, string_format("%d|%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s", warp.frame, warp.tick, warp.p[1], warp.p[2], warp.p[3], warp.r[1], warp.r[2], warp.r[3], warp.v[1], warp.v[2], warp.v[3], tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+					if warp.tick then
+						fileWrite(save_file, string_format("%d|%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s", warp.frame, warp.tick, warp.p[1], warp.p[2], warp.p[3], warp.r[1], warp.r[2], warp.r[3], warp.v[1], warp.v[2], warp.v[3], tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+					end
+					
 				end
 				fileWrite(save_file, "-warps")
 			end
@@ -869,7 +879,7 @@ function tas.commands(cmd, ...)
 				value = tostring(value)
 			end
 			
-			if tas.settings[key] then
+			if tas.settings[key] ~= nil then
 				tas.settings[key] = value
 				tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
 			else
@@ -1094,7 +1104,7 @@ function tas.render_playback()
 	
 	else
 		
-		removeEventHandler("onClientRender", root, tas.render_playback)
+		removeEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 		tas.var.playbacking = false
 		tas.resetBinds()
 		
@@ -1144,7 +1154,7 @@ function tas.pathWay()
 	
 		local frameSkipping = (tas.var.playbacking == true and 1) or tas.settings.debugging.frameSkipping
 		local startFrame = (tas.var.playbacking == true and tas.var.play_frame + 2) or 1
-		local endFrame = (tas.var.playbacking == false and #tas.data - frameSkipping - 1) or math.min(tas.var.play_frame + tas.var.fps * 2, #tas.data - frameSkipping - 1)
+		local endFrame = (tas.var.playbacking == false and #tas.data - frameSkipping - 1) or math.min(tas.var.play_frame + tas.var.fps * 3, #tas.data - frameSkipping - 1)
 		
 		for i = startFrame, endFrame, frameSkipping do
 			if tas.data[i] and tas.data[endFrame] then
