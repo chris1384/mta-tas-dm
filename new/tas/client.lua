@@ -18,8 +18,6 @@ local tas = {
 		
 		rewinding = false, -- [UNUSED]
 		
-		loading_warp = false, -- used to restrict stopping recording when warp is loading
-		
 		playbacking = false, -- magic happening
 		
 		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
@@ -317,7 +315,7 @@ function tas.commands(cmd, ...)
 		
 		if tas.var.recording then
 		
-			if tas.var.loading_warp then tas.prompt("Stopping record failed, please wait a bit!", 255, 100, 100) return end
+			if tas.timers.load_warp then tas.prompt("Stopping record failed, please wait a bit!", 255, 100, 100) return end
 			
 			removeEventHandler("onClientPreRender", root, tas.render_record)
 			tas.var.recording = false
@@ -372,7 +370,7 @@ function tas.commands(cmd, ...)
 	elseif cmd == tas.registered_commands.save_warp then
 	
 		if not vehicle then tas.prompt("Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
-		if tas.var.loading_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
+		if tas.timers.load_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Saving warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
 		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
@@ -432,8 +430,6 @@ function tas.commands(cmd, ...)
 			end
 		end
 		
-		tas.var.loading_warp = true
-		
 		setElementPosition(vehicle, unpack(w_data.p))
 		setElementRotation(vehicle, unpack(w_data.r))
 		
@@ -468,7 +464,6 @@ function tas.commands(cmd, ...)
 			end
 			
 			tas.timers.load_warp = nil
-			tas.var.loading_warp = false
 			
 		end, tas.settings.warpDelay, 1)
 								
