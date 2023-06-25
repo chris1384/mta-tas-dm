@@ -69,10 +69,25 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Well done!
 
 ### 4. Additional Info (FAQ)
+***Is it really TAS?***
+- Yes and no.
+- This is not an external software. It's a simple LUA script that can be used on local servers in order for players to achieve some goals that couldn't be able to do before.
+- Since GTA:SA depends entirely on random movement. It's impossible to map the keys for every frame and expect to run it the same every time. These actions are not as deterministic as they are in Trackmania.
+- So in order to achieve a perfect playback, position and rotation of the vehicle are also used to manage these perfect runs. You can test the randomness by disabling helper functions and playback your run using only keys: ***/tascvar bool useMacros true***
+  
+***Differences between TAS and other Recording scripts***
+- Almost every recording script that has been made in the past are meant to be used exclusively on the Map Editor.
+- TAS focuses on recording every player action in order to display everything perfectly on every frame, and having it played back whenever you want. It can be used everywhere while your ped is in a vehicle.
+- It also includes features that tries to fix any imperfections on the go so it shouldn't be glitchy most of the time.
+
+***Can you run TAS on public servers?***
+- Is that server yours? If so, just start the resource itself.
+- If not, don't even think about it.
+
 ***Where are my saved runs?***
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
-- This option can be changed in version 1.4.
+- This option can be changed in version 1.4 using the following command: ***/tascvar bool usePrivateFolder false***
 
 ## Something you would want implemented or got any bugs? Fill out a form in the Issues section!
 ## For any additional help, please contact me on Discord: *chrisu#9616* (or just chris1384) or on MTA:SA forums (chris1384).
