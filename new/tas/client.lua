@@ -1188,33 +1188,36 @@ function tas.pathWay()
 		for i=2, #tas.data do
 			local x, y, z = unpack(tas.data[i].p)
 			local vx, vy, vz = unpack(tas.data[i].v)
-			local fixed = (tas.data[i].fixed == true and tocolor(0, 255, 0, 255)) or tocolor(255, 0, 0, 255)
-			dxDrawLine3D(x, y, z-1, x, y, z+1, fixed, 5)
+			local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
+			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
 			
 			local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
 			if swX and swY then
-				dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, fixed, 1, "arial", "center", "center")
+				dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
 			end
 			
+			local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
 			dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
-			local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.1, 2)
-			if swX and swY then
-				dxDrawText(tas.dist3D(0, 0, 0, vx, vy, vz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
-			end
 			
 			if tas.data[i+1] then
 				local nx, ny, nz = unpack(tas.data[i+1].p)
 				
-				local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
-				local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
-				if swX and swY then
-					dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+				local frame_spacing_difference = tas.dist3D(x, y, z, nx, ny, nz)
+				if frame_spacing_difference > velocity_magnitude + 0.1 then
+					local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
+					local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
+					if swX and swY then
+						dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 0, 255), 1, "arial", "center", "center")
+					end
 				end
 				
-				dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
-				local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
-				if swX and swY then
-					dxDrawText(tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 255, 255), 1, "arial", "center", "center")
+				local velocity_frame_difference = tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz)
+				if velocity_frame_difference > 0.05 then
+					dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
+					local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
+					if swX and swY then
+						dxDrawText(velocity_frame_difference, swX, swY, swX, swY, tocolor(255, 0, 255, 255), 1, "arial", "center", "center")
+					end
 				end
 			end
 		end
