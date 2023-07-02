@@ -32,7 +32,7 @@ local tas = {
 		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
-		trigger_mapStart = false, -- start recording on map start. if there's data found, switch to automatic playback instead
+		trigger_mapStart = false, -- [AUTO-TAS cvar] start recording on map start. if there's data found, switch to automatic playback instead
 		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 		
 		usePrivateFolder = true, 
@@ -81,13 +81,14 @@ local tas = {
 		adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
 		adaptiveThreshold = 6, -- [UNUSED] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
 		
-		useMacros = false, 
+		useOnlyBinds = false, 
 		--[[ 	
 			use only keybinds while playbacking; position, rotation, velocity, health, nos and model recorded won't be used with helping of the run.
 			please disable 'playbackInterpolation' or set 'playbackSpeed' to 1 for this to work properly [UNSURE]
 			keep in mind that any lagspike can severely affect the playback. for that, use adaptiveInterpolation. [UNUSED]
 			not recommended while showcasing maps and it's mainly used for debugging
 		]]
+		useNitroStates = true, -- check for the nitro state on every frame that has been recorded, it updates in real time but can cause visual bugs during multiplayer gameplay.
 		
 		allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
 		-- //
@@ -356,7 +357,7 @@ function tas.commands(cmd, ...)
 			tas.var.play_frame = 1
 			tas.var.record_tick = getTickCount()
 			
-			if tas.settings.useMacros then
+			if tas.settings.useOnlyBinds then
 				setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
 				setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
 				setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
@@ -373,11 +374,14 @@ function tas.commands(cmd, ...)
 		if tas.timers.load_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Saving warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		
-		local tick, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
+		local _, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
+		local tick = nil
 		local frame = #tas.data
 		
 		if not tas.var.recording then
 			tick, frame = nil, nil
+		else
+			tick = tas.data[#tas.data].tick
 		end
 		
 		table_insert(tas.warps, {
@@ -426,7 +430,8 @@ function tas.commands(cmd, ...)
 			else
 				tas.var.recording = false
 				tas.prompt("Critical error, warp tick is $$bigger ##than last frame tick!", 255, 100, 100)
-				tas.prompt("Recording stopped for safety, use $$/"..tas.registered_commands.resume.." ## to properly continue your run!", 255, 100, 100) 
+				tas.prompt("Recording stopped for safety, use $$/"..tas.registered_commands.resume.." ##to properly continue your run!", 255, 100, 100) 
+				tas.prompt("Save: "..tostring(w_data.tick).." | Last: "..tostring(tas.data[#tas.data].tick), 255, 100, 100)  
 			end
 		end
 		
@@ -447,7 +452,17 @@ function tas.commands(cmd, ...)
 			tas.timers.load_warp = nil 
 		end
 		
+		local load_startTick = getTickCount()
+		local fps_to_ms = math_ceil(1000 / tas.var.fps)
+		
 		tas.timers.load_warp = 	setTimer(function()
+		
+			if getTickCount() - load_startTick > fps_to_ms + tas.settings.warpDelay then
+				setTimer(executeCommandHandler, 50, 1, tas.registered_commands.load_warp) -- ez hax, can get softlocked
+			end
+			
+			tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms
+			tas.data[#tas.data].fixed = nil
 		
 			setElementFrozen(vehicle, false)
 			
@@ -569,7 +584,7 @@ function tas.commands(cmd, ...)
 		tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
 		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick / tas.settings.playbackSpeed)
 		
-		if tas.settings.useMacros then
+		if tas.settings.useOnlyBinds then
 			setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
 			setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
 			setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
@@ -853,7 +868,11 @@ function tas.commands(cmd, ...)
 		local key = args[2]
 		local value = args[3]
 		
-		if not value_type then tas.prompt("Setting cvar failed, syntax is: $$/"..tas.registered_commands.cvar.." type key value", 255, 100, 100) return end 
+		if not value_type then 
+			tas.prompt("Setting cvar failed, syntax is: $$/"..tas.registered_commands.cvar.." type key value", 255, 100, 100) 
+			tas.prompt("Type can be: $$show bool number string##, key is $$cvar name ##and value is your new value.", 255, 100, 100) 
+			return 
+		end 
 		
 		if not key and value_type == "show" then
 			for k,v in pairs(tas.settings) do
@@ -896,6 +915,7 @@ function tas.commands(cmd, ...)
 		tas.prompt("/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.debug.." $$- ##toggle debugging", 255, 100, 100)
+		tas.prompt("/"..tas.registered_commands.cvar.." $$- ##change settings, use $$/"..tas.registered_commands.cvar.." show ##for all cvars", 255, 100, 100)
 	end
 end
 
@@ -1061,7 +1081,7 @@ function tas.render_playback()
 		local frame_data = tas.data[tas.var.play_frame]
 		local frame_data_next = tas.data[tas.var.play_frame+1]
 		
-		if not tas.settings.useMacros then
+		if not tas.settings.useOnlyBinds then
 		
 			local x = tas.lerp(frame_data.p[1], frame_data_next.p[1], inbetweening)
 			local y = tas.lerp(frame_data.p[2], frame_data_next.p[2], inbetweening)
@@ -1082,7 +1102,9 @@ function tas.render_playback()
 			end
 			setElementHealth(vehicle, frame_data.h)
 			
-			tas.nos(vehicle, frame_data.n)
+			if tas.settings.useNitroStates then
+				tas.nos(vehicle, frame_data.n)
+			end
 			
 		end
 		
@@ -1163,7 +1185,7 @@ function tas.pathWay()
 		
 	elseif tas.settings.debugging.level == 3 then
 	
-		for i=2, #tas.data - 1 do
+		for i=2, #tas.data do
 			local x, y, z = unpack(tas.data[i].p)
 			local vx, vy, vz = unpack(tas.data[i].v)
 			local fixed = (tas.data[i].fixed == true and tocolor(0, 255, 0, 255)) or tocolor(255, 0, 0, 255)
@@ -1180,18 +1202,20 @@ function tas.pathWay()
 				dxDrawText(tas.dist3D(0, 0, 0, vx, vy, vz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
 			end
 			
-			local nx, ny, nz = unpack(tas.data[i+1].p)
-			
-			local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
-			local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
-			if swX and swY then
-				dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
-			end
-			
-			dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
-			local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
-			if swX and swY then
-				dxDrawText(tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 255, 255), 1, "arial", "center", "center")
+			if tas.data[i+1] then
+				local nx, ny, nz = unpack(tas.data[i+1].p)
+				
+				local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
+				local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
+				if swX and swY then
+					dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(0, 255, 255, 255), 1, "arial", "center", "center")
+				end
+				
+				dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
+				local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
+				if swX and swY then
+					dxDrawText(tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 255, 255), 1, "arial", "center", "center")
+				end
 			end
 		end
 		
