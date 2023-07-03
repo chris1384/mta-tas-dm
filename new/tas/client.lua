@@ -247,6 +247,16 @@ function tas.stop()
 end
 addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
 
+-- // Stop recording on FPS change
+function tas.changeFPSEvent(_, _, _, _, _, fps)
+	if tas.var.recording then
+		removeEventHandler("onClientPreRender", root, tas.render_record)
+		tas.var.recording = false
+		tas.prompt("Recording stopped because of FPS change "..tostring(tas.var.fps).." $$=> ##"..tostring(fps).."! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+	end
+end
+addDebugHook("preFunction", tas.changeFPSEvent, {"setFPSLimit"})
+
 -- // Custom Race Events
 function tas.raceWrap(event)
 	if not tas.settings.trigger_mapStart then return end
