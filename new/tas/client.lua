@@ -20,7 +20,7 @@ local tas = {
 		
 		playbacking = false, -- magic happening
 		
-		fps = 51 -- [DEFAULT] current fps of the user, can change during recording or when you're starting a new one
+		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
 	},
 			
 	data = {}, -- run data
@@ -29,7 +29,7 @@ local tas = {
 	
 	settings = 	{
 		-- // General
-		startPrompt = true, -- show resource initialization text on startup
+		startPrompt = false, -- show resource initialization text on startup
 		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
 		trigger_mapStart = false, -- [AUTO-TAS cvar] start recording on map start. if there's data found, switch to automatic playback instead
@@ -455,9 +455,6 @@ function tas.commands(cmd, ...)
 			if getTickCount() - load_startTick > fps_to_ms + tas.settings.warpDelay then
 				setTimer(executeCommandHandler, 50, 1, tas.registered_commands.load_warp) -- ez hax, can get softlocked
 			end
-			
-			tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms
-			tas.data[#tas.data].fixed = nil
 		
 			setElementFrozen(vehicle, false)
 			
@@ -471,6 +468,8 @@ function tas.commands(cmd, ...)
 			tas.nos(vehicle, w_data.n)
 			
 			if tas.var.recording then
+				tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms
+				tas.data[#tas.data].fixed = nil
 				tas.var.record_tick = getTickCount() - w_data.tick
 				addEventHandler("onClientPreRender", root, tas.render_record)
 			end
