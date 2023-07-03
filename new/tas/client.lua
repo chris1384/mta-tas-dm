@@ -29,7 +29,7 @@ local tas = {
 	
 	settings = 	{
 		-- // General
-		startPrompt = false, -- show resource initialization text on startup
+		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
 		
 		trigger_mapStart = false, -- [AUTO-TAS cvar] start recording on map start. if there's data found, switch to automatic playback instead
