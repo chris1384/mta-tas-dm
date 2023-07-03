@@ -20,7 +20,7 @@ local tas = {
 		
 		playbacking = false, -- magic happening
 		
-		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
+		fps = 51 -- [DEFAULT] current fps of the user, can change during recording or when you're starting a new one
 	},
 			
 	data = {}, -- run data
@@ -42,6 +42,7 @@ local tas = {
 		]]
 		
 		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
+		abortOnInvalidity = false, -- prevent TAS from loading any more lines if it finds an invalid one. can cause missing frames if set to true
 		-- //
 		
 		
@@ -267,12 +268,6 @@ end
 addEvent("tas:triggerCommand", true)
 addEventHandler("tas:triggerCommand", root, tas.raceWrap)
 
--- // Update FPS variable while recording
-function tas.changeFPSEvent(_, _, _, _, _, fps)
-    tas.var.fps = fps
-end
-addDebugHook("postFunction", tas.changeFPSEvent, {"setFPSLimit"})
-
 -- // Another cancellation event
 function tas.minimizeEvent()
 	if tas.var.recording then
@@ -466,6 +461,8 @@ function tas.commands(cmd, ...)
 		
 			setElementFrozen(vehicle, false)
 			
+			setElementPosition(vehicle, unpack(w_data.p))
+			setElementRotation(vehicle, unpack(w_data.r))
 			setElementVelocity(vehicle, unpack(w_data.v))
 			setElementAngularVelocity(vehicle, unpack(w_data.rv))
 			
@@ -502,6 +499,14 @@ function tas.commands(cmd, ...)
 		if #tas.data < 1 then tas.prompt("Resuming failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Resuming failed, please wait for the resume trigger!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Resuming failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		if tas.var.fps ~= nil then
+			if getFPSLimit() ~= tas.var.fps then 
+				tas.prompt("Resuming failed, recorded FPS was $$"..tostring(tas.var.fps).."##!", 255, 100, 100) 
+				return 
+			end
+		else
+			tas.var.fps = getFPSLimit()
+		end
 	
 		local resume_number = #tas.data
 		if args[1] ~= nil then
@@ -670,6 +675,12 @@ function tas.commands(cmd, ...)
 				fileWrite(save_file, "-warps")
 			end
 			-- //
+
+			--[[ // Settings part
+			fileWrite(save_file, "+settings\n")
+			fileWrite(save_file, "fps "..tostring(tas.var.fps))
+			fileWrite(save_file, "-settings")
+			-- //]]
 			
 			fileClose(save_file)
 			
@@ -700,95 +711,185 @@ function tas.commands(cmd, ...)
 			local file_size = fileGetSize(load_file)
 			local file_data = fileRead(load_file, file_size)
 			
-			-- // Recording part
-			local run_lines = tas.ambatublou(file_data, "+run", "-run")
-			
-			if run_lines then
-				local run_data = split(run_lines, "\n")
+			if type(file_data) == "string" and file_data:len() > 0 then
 				
-				if run_data and type(run_data) == "table" and #run_data > 1 then
+				-- // Recording part
 				
-					tas.data = {}
+				tas.data = {}
+				
+				local run_lines = tas.ambatublou(file_data, "+run", "-run")
+				
+				if run_lines then
+					local run_data = split(run_lines, "\n")
 					
-					for i=1, #run_data do
-					
-						local att = split(run_data[i], "|")
+					if run_data and type(run_data) == "table" and #run_data > 1 then
 						
-						local p = split(att[2], ",") 
-						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
+						for i=1, #run_data do
 						
-						local r = split(att[3], ",") 
-						r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
-						
-						local v = split(att[4], ",") 
-						v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
-						
-						local rv = split(att[5], ",") 
-						rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
-						
-						local n = {}
-						
-						local nos_returns = split(att[8], ",")
-						nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
-						
-						if #nos_returns > 1 then 
-							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
-						else
-							n = nil
+							local att = split(run_data[i], "|")
+							
+							if #att > 4 then
+							
+								local p = split(att[2], ",") 
+								p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
+								
+								local r = split(att[3], ",") 
+								r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
+								
+								local v = split(att[4], ",") 
+								v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
+								
+								local rv = split(att[5], ",") 
+								rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
+								
+								local n = {}
+								
+								local nos_returns = split(att[8], ",")
+								nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
+								
+								if #nos_returns > 1 then 
+									n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
+								else
+									n = nil
+								end
+								
+								local keys
+								if att[9] then
+									keys = split(att[9], ",")
+								end
+								
+								table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = keys})
+							
+							else
+							
+								if tas.settings.abortOnInvalidity then
+								
+									tas.prompt("Loading record failed, recurring $$error ##during reading file! (invalid run data)", 255, 100, 100)
+									fileClose(load_file)
+									tas.data = {}
+									tas.warps = {}
+									
+									return
+								else
+									tas.prompt("Loading record warning, invalid run line $$#"..tostring(i).." ##skipped.", 255, 100, 100)
+								end
+							
+							end
 						end
+					end
+				end
+				-- //
+				
+				-- // Warps part
+				
+				tas.warps = {}
+				
+				local warp_lines = tas.ambatublou(file_data, "+warps", "-warps")
+				
+				if warp_lines then
+					local warp_data = split(warp_lines, "\n")
+					if warp_data and type(warp_data) == "table" and #warp_data > 1 then
 						
-						local keys
-						if att[9] then
-							keys = split(att[9], ",")
+						for i=1, #warp_data do
+						
+							local att = split(warp_data[i], "|")
+							
+							if #att > 5 then
+							
+								local p = split(att[3], ",") 
+								p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
+								
+								local r = split(att[4], ",") 
+								r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
+								
+								local v = split(att[5], ",") 
+								v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
+								
+								local rv = split(att[6], ",") 
+								rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
+								
+								local n = {}
+								
+								local nos_returns = split(att[9], ",")
+								nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
+								
+								if #nos_returns > 1 then 
+									n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
+								else
+									n = nil
+								end
+								
+								table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
+								
+							else
+							
+								if tas.settings.abortOnInvalidity then
+								
+									tas.prompt("Loading record failed, recurring $$error ##during reading file! (invalid warp data)", 255, 100, 100)
+									fileClose(load_file)
+									tas.data = {}
+									tas.warps = {}
+									return
+								
+								else
+									tas.prompt("Loading record warning, invalid run line $$#"..tostring(i).." ##skipped.", 255, 100, 100)
+								end
+							end
 						end
-						
-						table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = keys})
 						
 					end
 				end
-			end
-			-- //
-			
-			-- // Warps part
-			local warp_lines = tas.ambatublou(file_data, "+warps", "-warps")
-			
-			if warp_lines then
-				local warp_data = split(warp_lines, "\n")
-				if warp_data and type(warp_data) == "table" and #warp_data > 1 then
 				
-					tas.warps = {}
-					
-					for i=1, #warp_data do
-					
-						local att = split(warp_data[i], "|")
+				--[[ // Settings part
+				local settings_table = {}
+				local settings_line = tas.ambatublou(file_data, "+settings", "-settings")
+				
+				if settings_line then
+					local settings_data = split(settings_line, "\n")
+					if settings_data and type(settings_data) == "table" and #settings_data >= 1 then
 						
-						local p = split(att[3], ",") 
-						p[1], p[2], p[3] = tonumber(p[1]), tonumber(p[2]), tonumber(p[3]) 
-						
-						local r = split(att[4], ",") 
-						r[1], r[2], r[3] = tonumber(r[1]), tonumber(r[2]), tonumber(r[3]) 
-						
-						local v = split(att[5], ",") 
-						v[1], v[2], v[3] = tonumber(v[1]), tonumber(v[2]), tonumber(v[3]) 
-						
-						local rv = split(att[6], ",") 
-						rv[1], rv[2], rv[3] = tonumber(rv[1]), tonumber(rv[2]), tonumber(rv[3]) 
-						
-						local n = {}
-						
-						local nos_returns = split(att[9], ",")
-						nos_returns[1], nos_returns[2], nos_returns[3] = tonumber(nos_returns[1]), tonumber(nos_returns[2]), tonumber(nos_returns[3])
-						
-						if #nos_returns > 1 then 
-							n = {c = nos_returns[1], l = nos_returns[2], a = (nos_returns[3] == 1)}
-						else
-							n = nil
+						local settings_fields = split(settings_data[1], "|")
+						for i=1, #settings_fields do
+							local key, value = gettok(settings_fields[i], 1, "="), gettok(settings_fields[i], 2, "=")
+							value = tonumber(value)
+							if key and value then
+								settings_table[key] = value
+							end
 						end
-						
-						table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
 					end
-					
 				end
+				
+				if settings_table.fps == nil then
+					if #tas.data > 100 then
+						local stacked, elements = 0, 0
+						for i=2, 100 do
+							stacked = stacked + (tas.data[i].tick - tas.data[i-1].tick)
+							elements = elements + 1
+						end
+						local fps_calculated = 1000/(stacked/elements)
+						tas.var.fps = (fps_calculated>=0 and math.floor(fps_calculated+0.5)) or math.ceil(fps_calculated-0.5)
+					end
+				else
+					tas.var.fps = settings_table.fps
+				end]]
+				
+				if #tas.data > 100 then
+					local stacked, elements = 0, 0
+					for i=2, 100 do
+						stacked = stacked + (tas.data[i].tick - tas.data[i-1].tick)
+						elements = elements + 1
+					end
+					local fps_calculated = 1000/(stacked/elements)
+					tas.var.fps = (fps_calculated>=0 and math.floor(fps_calculated+0.5)) or math.ceil(fps_calculated-0.5)
+				end
+			else
+			
+				tas.prompt("Loading record failed, recurring $$error ##during reading file! (empty or missing permissions)", 255, 100, 100)
+				fileClose(load_file)
+				tas.data = {}
+				tas.warps = {}
+				
+				return
 			end
 			-- //
 			
@@ -1185,40 +1286,63 @@ function tas.pathWay()
 		
 	elseif tas.settings.debugging.level == 3 then
 	
-		for i=2, #tas.data do
-			local x, y, z = unpack(tas.data[i].p)
-			local vx, vy, vz = unpack(tas.data[i].v)
-			local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
-			dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
-			
-			local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
-			if swX and swY then
-				dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
+		local tas_data_total = #tas.data
+		local fps_magnitude = tas.var.fps/50
+		
+		if tas_data_total > 2 then
+			for i=2, tas_data_total do
+				local x, y, z = unpack(tas.data[i].p)
+				local vx, vy, vz = unpack(tas.data[i].v)
+				vx, vy, vz = vx/fps_magnitude, vy/fps_magnitude, vz/fps_magnitude
+				local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
+				dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
+				
+				local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
+				if swX and swY then
+					dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
+				end
+				
+				local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
+				dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
+				
+				if tas.data[i+1] then
+					local nx, ny, nz = unpack(tas.data[i+1].p)
+					
+					local frame_spacing_difference = tas.dist3D(x, y, z, nx, ny, nz)
+					if frame_spacing_difference > velocity_magnitude + 0.15 then
+						local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
+						local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
+						if swX and swY then
+							dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 0, 255), 1, "arial", "center", "center")
+						end
+					end
+					
+					local velocity_frame_difference = tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz)
+					if velocity_frame_difference > 0.15 then
+						dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
+						local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
+						if swX and swY then
+							dxDrawText(velocity_frame_difference, swX, swY, swX, swY, tocolor(255, 0, 255, 255), 1, "arial", "center", "center")
+						end
+					end
+				end
 			end
-			
-			local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
-			dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
-			
-			if tas.data[i+1] then
-				local nx, ny, nz = unpack(tas.data[i+1].p)
+		end
+		
+		local tas_warps_total = #tas.warps
+		
+		if tas_warps_total >= 1 then
+			for i=1, tas_warps_total do
+				local x, y, z = unpack(tas.warps[i].p)
+				--local vx, vy, vz = unpack(tas.data[i].v)
+				dxDrawLine3D(x, y, z+1, x, y, z+1.7, tocolor(255, 180, 60, 255), 5)
 				
-				local frame_spacing_difference = tas.dist3D(x, y, z, nx, ny, nz)
-				if frame_spacing_difference > velocity_magnitude + 0.1 then
-					local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
-					local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
-					if swX and swY then
-						dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 0, 255), 1, "arial", "center", "center")
-					end
+				local swX, swY = getScreenFromWorldPosition(x, y, z+1.9, 2)
+				if swX and swY then
+					local tick = (tas.warps[i].tick ~= nil and tostring(tas.warps[i].tick) ) or ""
+					dxDrawText(tostring(i).. " "..tostring(tas.warps[i].frame).." "..tick, swX, swY, swX, swY, tocolor(255, 180, 60, 255), 1, "arial", "center", "center")
 				end
 				
-				local velocity_frame_difference = tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz)
-				if velocity_frame_difference > 0.05 then
-					dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
-					local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
-					if swX and swY then
-						dxDrawText(velocity_frame_difference, swX, swY, swX, swY, tocolor(255, 0, 255, 255), 1, "arial", "center", "center")
-					end
-				end
 			end
 		end
 		
