@@ -28,6 +28,7 @@ local tas = {
 	entities = {}, -- [UNUSED]
 	
 	settings = 	{
+	
 		-- // General
 		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
@@ -60,10 +61,9 @@ local tas = {
 		-- // Record Settings
 		precautiousRecording = true, 
 		--[[ 
-			~STILL NEEDS TESTING~
-			CURRENT BUGS: tick can return -nan(ind) or negative values, the function can end up in a loop, might screw up teleportation scripts, warp timer may interfere.
+			CURRENT BUGS: the function can get triggered a lot more when using higher fps, even if is not a lagspike.
 			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
-			DO NOT RECORD WITH FPS HIGHER THAN 51, IT CAN CAUSE MASSIVE BUGS!!!
+			DO NOT RECORD WITH FPS HIGHER THAN 75, IT CAN CAUSE MASSIVE BUGS!!!
 		]]
 		-- //
 		
@@ -90,6 +90,7 @@ local tas = {
 			not recommended while showcasing maps and it's mainly used for debugging
 		]]
 		useNitroStates = true, -- check for the nitro state on every frame that has been recorded, it updates in real time but can cause visual bugs during multiplayer gameplay.
+		useVehicleChange = true, -- check for vehicle model on every frame so it would display the correct vehicle every time.
 		
 		allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
 		-- //
@@ -108,6 +109,7 @@ local tas = {
 			offsetX = 0, -- offset for hud
 			
 			frameSkipping = 15, -- optimize the pathway when you're not playbacking
+			wholeFrameClipDistance = 200, -- farClipDistance for full frames, so it won't display everything.
 			
 			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
@@ -447,9 +449,11 @@ function tas.commands(cmd, ...)
 		
 		setElementFrozen(vehicle, true)
 		
-		if getElementModel(vehicle) ~= w_data.m then
-			setElementModel(vehicle, w_data.m)
-			triggerServerEvent("tas:onModelChange", vehicle, w_data.m)
+		if tas.settings.useVehicleChange then
+			if getElementModel(vehicle) ~= w_data.m then
+				setElementModel(vehicle, w_data.m)
+				triggerServerEvent("tas:onModelChange", vehicle, w_data.m)
+			end
 		end
 		
 		if tas.timers.load_warp then 
@@ -545,9 +549,11 @@ function tas.commands(cmd, ...)
 		
 		setElementFrozen(vehicle, true)
 		
-		if getElementModel(vehicle) ~= resume_data.m then
-			setElementModel(vehicle, resume_data.m)
-			triggerServerEvent("tas:onModelChange", vehicle, resume_data.m)
+		if tas.settings.useVehicleChange then
+			if getElementModel(vehicle) ~= resume_data.m then
+				setElementModel(vehicle, resume_data.m)
+				triggerServerEvent("tas:onModelChange", vehicle, resume_data.m)
+			end
 		end
 		
 		tas.timers.resume_load = setTimer(function()
@@ -713,6 +719,7 @@ function tas.commands(cmd, ...)
 			return 
 		end
 		
+		local file_additional = {}
 		local load_file = (fileExists(fileTarget) == true and fileOpen(fileTarget)) or false
 		
 		if load_file then
@@ -849,6 +856,10 @@ function tas.commands(cmd, ...)
 					end
 				end
 				
+				-- // Info Part
+				file_additional.author = string_gsub(gettok(gettok(file_data, 2, "\n"), 1, "|"), "# Author: ", "")
+				if not file_additional.author then file_additional.author = "Unknown" end
+				
 				--[[ // Settings part
 				local settings_table = {}
 				local settings_line = tas.ambatublou(file_data, "+settings", "-settings")
@@ -904,7 +915,22 @@ function tas.commands(cmd, ...)
 			
 			fileClose(load_file)
 			
-			tas.prompt("File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
+			local hunter_found = nil
+			for i=#tas.data, 1, -1 do
+				if hunter_found == nil then
+					if tas.data[i].m == 425 then hunter_found = true end
+				elseif hunter_found == true then
+					if tas.data[i].m ~= 425 then hunter_found = i break end
+				end
+			end
+			
+			if type(hunter_found) ~= "number" then hunter_found = #tas.data end
+			
+			file_additional.time = string.format("%02d:%02d:%02d", math.floor(tas.data[hunter_found].tick/1000/60), tas.data[hunter_found].tick/1000%60, (tas.data[#tas.data].tick/1000%1)*100)
+			if not file_additional.time then file_additional.time = "N/A" end
+			
+			tas.prompt("File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(tas.var.fps).." ##FPS / $$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
+			tas.prompt("Author: $$".. file_additional.author.."##/ Time: $$".. file_additional.time, 255, 255, 100)
 			
 		else
 		
@@ -1206,9 +1232,11 @@ function tas.render_playback()
 			setElementVelocity(vehicle, unpack(frame_data.v))
 			setElementAngularVelocity(vehicle, unpack(frame_data.rv))
 			
-			if getElementModel(vehicle) ~= frame_data.m then
-				setElementModel(vehicle, frame_data.m)
-				triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+			if tas.settings.useVehicleChange then
+				if getElementModel(vehicle) ~= frame_data.m then
+					setElementModel(vehicle, frame_data.m)
+					triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+				end
 			end
 			setElementHealth(vehicle, frame_data.h)
 			
@@ -1264,12 +1292,16 @@ function tas.dxDebug()
 	
 		local recording_extra = (tas.timers.load_warp ~= nil and "(LOADING WARP..)") or (tas.timers.resume_load ~= nil and "(RESUMING..)") or ""
 	
-		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200, 0, 0, 1)
-		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18, 0, 0, 1)
+		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200+18*0, 0, 0, 1)
+		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*1, 0, 0, 1)
 		
-		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
-		tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
-		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame), screenW/2-offsetX+170, screenH-200+18*5, 0, 0, 1)
+		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
+		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		--tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		--tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		
+		local tick_var = (tas.var.playbacking == true and "#"..tostring(tas.data[tas.var.play_frame].tick)) or "N/A"
+		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*5, 0, 0, 1)
 		
 		tas.pathWay()
 	end
@@ -1297,41 +1329,45 @@ function tas.pathWay()
 	
 		local tas_data_total = #tas.data
 		local fps_magnitude = tas.var.fps/50
+		local pX, pY, pZ = getElementPosition(localPlayer)
 		
 		if tas_data_total > 2 then
 			for i=2, tas_data_total do
 				local x, y, z = unpack(tas.data[i].p)
-				local vx, vy, vz = unpack(tas.data[i].v)
-				vx, vy, vz = vx/fps_magnitude, vy/fps_magnitude, vz/fps_magnitude
-				local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
-				dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
 				
-				local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
-				if swX and swY then
-					dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
-				end
-				
-				local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
-				dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
-				
-				if tas.data[i+1] then
-					local nx, ny, nz = unpack(tas.data[i+1].p)
+				if not tas.settings.debugging.wholeFrameClipDistance or (tas.settings.debugging.wholeFrameClipDistance and tas.dist3D(pX, pY, pZ, x, y, z) < tas.settings.debugging.wholeFrameClipDistance) then
+					local vx, vy, vz = unpack(tas.data[i].v)
+					vx, vy, vz = vx/fps_magnitude, vy/fps_magnitude, vz/fps_magnitude
+					local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
+					dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
 					
-					local frame_spacing_difference = tas.dist3D(x, y, z, nx, ny, nz)
-					if frame_spacing_difference > velocity_magnitude + 0.15 then
-						local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
-						local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
-						if swX and swY then
-							dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 0, 255), 1, "arial", "center", "center")
-						end
+					local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
+					if swX and swY then
+						dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
 					end
 					
-					local velocity_frame_difference = tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz)
-					if velocity_frame_difference > 0.15 then
-						dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
-						local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
-						if swX and swY then
-							dxDrawText(velocity_frame_difference, swX, swY, swX, swY, tocolor(255, 0, 255, 255), 1, "arial", "center", "center")
+					local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
+					dxDrawLine3D(x, y, z, x+vx, y+vy, z+vz, tocolor(0, 255, 255, 100), 5)
+					
+					if tas.data[i+1] then
+						local nx, ny, nz = unpack(tas.data[i+1].p)
+						
+						local frame_spacing_difference = tas.dist3D(x, y, z, nx, ny, nz)
+						if frame_spacing_difference > velocity_magnitude + 0.1 then
+							local mx, my, mz = tas.middle3D(x, y, z, nx, ny, nz)
+							local swX, swY = getScreenFromWorldPosition(mx, my, mz+1.5, 2)
+							if swX and swY then
+								dxDrawText(tas.dist3D(x, y, z, nx, ny, nz), swX, swY, swX, swY, tocolor(255, 255, 0, 255), 1, "arial", "center", "center")
+							end
+						end
+						
+						local velocity_frame_difference = tas.dist3D(x+vx, y+vy, z+vz, nx, ny, nz)
+						if velocity_frame_difference > 0.1 then
+							dxDrawLine3D(x+vx, y+vy, z+vz, nx, ny, nz, tocolor(255, 0, 255, 100), 5)
+							local swX, swY = getScreenFromWorldPosition(x+vx, y+vy, z+vz+0.5, 2)
+							if swX and swY then
+								dxDrawText(velocity_frame_difference, swX, swY, swX, swY, tocolor(255, 0, 255, 255), 1, "arial", "center", "center")
+							end
 						end
 					end
 				end
