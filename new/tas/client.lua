@@ -284,10 +284,10 @@ addEventHandler("tas:triggerCommand", root, tas.raceWrap)
 function tas.vultaicWrap()
 	tas.raceWrap("Started")
 end
-addEvent("onClientTimeIsUpDisplayRequest")
-addEvent("onClientArenaGridCountdown")
-addEventHandler("onClientTimeIsUpDisplayRequest", resourceRoot, tas.vultaicWrap)
-addEventHandler("onClientArenaGridCountdown", resourceRoot, tas.vultaicWrap)
+for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown"}) do
+	addEvent(vultaicEvents)
+	addEventHandler(vultaicEvents, root, tas.vultaicWrap)
+end
 
 -- // Another cancellation event
 function tas.minimizeEvent()
