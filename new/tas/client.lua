@@ -31,7 +31,7 @@ local tas = {
 	
 		-- // General
 		startPrompt = true, -- show resource initialization text on startup
-		promptType = 1, -- [UNUSED] how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers)
+		promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers), 3: iprint (clientscript log)
 		
 		trigger_mapStart = false, -- [AUTO-TAS cvar] start recording on map start. if there's data found, switch to automatic playback instead
 		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
@@ -279,6 +279,29 @@ function tas.raceWrap(event)
 end
 addEvent("tas:triggerCommand", true)
 addEventHandler("tas:triggerCommand", root, tas.raceWrap)
+
+-- // Vultaic Wrapper
+function tas.vultaicWrap()
+	tas.raceWrap("Started")
+end
+addEvent("onClientTimeIsUpDisplayRequest")
+addEvent("onClientArenaGridCountdown")
+addEventHandler("onClientTimeIsUpDisplayRequest", resourceRoot, tas.vultaicWrap)
+addEventHandler("onClientArenaGridCountdown", resourceRoot, tas.vultaicWrap)
+
+-- // Vultaic event
+function tas.vultaicWrap(...)
+	if tas.var.recording or tas.var.playbacking then return end
+	if #tas.data > 0 then
+		executeCommandHandler(tas.registered_commands.playback)
+	else
+		executeCommandHandler(tas.registered_commands.record)
+	end
+end
+addEvent("onClientTimeIsUpDisplayRequest")
+addEvent("onClientArenaGridCountdown")
+addEventHandler("onClientTimeIsUpDisplayRequest", resourceRoot, tas.vultaicWrap)
+addEventHandler("onClientArenaGridCountdown", resourceRoot, tas.vultaicWrap)
 
 -- // Another cancellation event
 function tas.minimizeEvent()
@@ -999,46 +1022,54 @@ function tas.commands(cmd, ...)
 		if tas.var.playbacking then tas.prompt("Setting cvar failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Setting cvar failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Setting cvar failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+	
+		local key = args[1]
+		local value = args[2]
 		
-		local value_type = args[1]
-		local key = args[2]
-		local value = args[3]
-		
-		if not value_type then 
-			tas.prompt("Setting cvar failed, syntax is: $$/"..tas.registered_commands.cvar.." type key value", 255, 100, 100) 
-			tas.prompt("Type can be: $$show bool number string##, key is $$cvar name ##and value is your new value.", 255, 100, 100) 
+		if not key then 
+			tas.prompt("Setting cvar failed, syntax is: $$/"..tas.registered_commands.cvar.." key value", 255, 100, 100) 
+			tas.prompt("Key is $$cvar name ##and value is your new value. Use $$/tascvar show ##to see all cvars.", 255, 100, 100) 
 			return 
 		end 
 		
-		if not key and value_type == "show" then
+		if key == "show" then
 			for k,v in pairs(tas.settings) do
 				if type(v) ~= "table" then
 					tas.prompt(tostring(k).. ": "..tostring(v), 255, 100, 255)
 				end
 			end
 			return
-		end
-		
-		if key and value then
-		
-			if value_type == "number" then
-				value = tonumber(value)
-			elseif value_type == "bool" then
-				value = (value == "true")
-			elseif value_type == "string" then
-				value = tostring(value)
-			end
 			
+		else
 			if tas.settings[key] ~= nil then
-				tas.settings[key] = value
-				tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
+			
+				local value_type = type(tas.settings[key])
+				
+				if value == nil then
+					tas.prompt(tostring(key).. ": "..tostring(tas.settings[key]).." (".. value_type:upper() ..")", 255, 100, 255)
+					return
+				end
+				
+				if value_type == "number" then
+					value = tonumber(value)
+				elseif value_type == "string" then
+					value = tostring(value)
+				elseif value_type == "bool" then
+					value = (value == "true")
+				end
+				
+				if value ~= nil then
+					tas.settings[key] = value
+					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
+				else
+					tas.prompt("Setting cvar failed, invalid key $$value##!", 255, 100, 100)
+					return
+				end
+				
 			else
 				tas.prompt("Setting cvar failed, setting key does not exist!", 255, 100, 100) 
 				return
 			end
-		else
-			tas.prompt("Setting cvar failed, missing arguments (key, value)!", 255, 100, 100) 
-			return
 		end
 		
 	-- // Show Help
@@ -1292,18 +1323,23 @@ function tas.dxDebug()
 	
 		local recording_extra = (tas.timers.load_warp ~= nil and "(LOADING WARP..)") or (tas.timers.resume_load ~= nil and "(RESUMING..)") or ""
 	
-		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200+18*0, 0, 0, 1)
-		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*1, 0, 0, 1)
+		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200+18*0, 1)
+		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*1, 1)
 		
-		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*3, 0, 0, 1)
-		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
-		--tas.dxText("Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
-		--tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame), screenW/2-offsetX+170, screenH-200+18*4, 0, 0, 1)
+		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*3, 1)
+		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 1)
 		
-		local tick_var = (tas.var.playbacking == true and "#"..tostring(tas.data[tas.var.play_frame].tick)) or "N/A"
-		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*5, 0, 0, 1)
+		local tick_var = nil
+		if tas.var.playbacking == true then tick_var = "#"..tostring(tas.data[tas.var.play_frame].tick) else tick_var = "N/A" end
+		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*5, 1)
 		
 		tas.pathWay()
+	end
+	
+	if tas.settings.promptType == 2 then
+		for i=1, #tas.var.prompts do
+			tas.dxText(tas.var.prompts[i], 30, screenH/2-150+18*(i-1), 1)
+		end
 	end
 end
 
@@ -1402,9 +1438,9 @@ function tas.dxKey(keyName, x, y, x2, y2, color)
 end
 
 -- // Cute dxText
-function tas.dxText(text, x, y, x2, y2, size)
-	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x2+1, y2+1, tocolor(0,0,0,255), size, "default", "left", "top", false, false, false, true)
-	dxDrawText(text, x, y, x2, y2, tocolor(255,255,255,255), size, "default", "left", "top", false, false, false, true)
+function tas.dxText(text, x, y, size)
+	dxDrawText(text:gsub("#%x%x%x%x%x%x", ""), x+1, y+1, x+1, y+1, tocolor(0,0,0,255), size, "default", "left", "top", false, false, false, true)
+	dxDrawText(text, x, y, x, y, tocolor(255,255,255,255), size, "default", "left", "top", false, false, false, true)
 end
 
 -- // Resetting ped controls
@@ -1417,7 +1453,17 @@ end
 -- // Command messages
 function tas.prompt(text, r, g, b)
 	if type(text) ~= "string" then return end
-	return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
+	if tas.settings.promptType == 1 then
+		return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
+	elseif tas.settings.promptType == 2 then
+		if not tas.var.prompts then tas.var.prompts = {} end
+		table_insert(tas.var.prompts, string_format("#%.2X%.2X%.2X", r, g, b).."[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)))
+		if #tas.var.prompts > 15 then
+			table_remove(tas.var.prompts, 1)
+		end
+	elseif tas.settings.promptType == 3 then
+		return iprint("[TAS] "..string_gsub(string_gsub(text, "%#%#", ""), "%$%$", ""))
+	end
 end
 
 -- // Useful
