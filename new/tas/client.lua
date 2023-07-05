@@ -289,20 +289,6 @@ addEvent("onClientArenaGridCountdown")
 addEventHandler("onClientTimeIsUpDisplayRequest", resourceRoot, tas.vultaicWrap)
 addEventHandler("onClientArenaGridCountdown", resourceRoot, tas.vultaicWrap)
 
--- // Vultaic event
-function tas.vultaicWrap(...)
-	if tas.var.recording or tas.var.playbacking then return end
-	if #tas.data > 0 then
-		executeCommandHandler(tas.registered_commands.playback)
-	else
-		executeCommandHandler(tas.registered_commands.record)
-	end
-end
-addEvent("onClientTimeIsUpDisplayRequest")
-addEvent("onClientArenaGridCountdown")
-addEventHandler("onClientTimeIsUpDisplayRequest", resourceRoot, tas.vultaicWrap)
-addEventHandler("onClientArenaGridCountdown", resourceRoot, tas.vultaicWrap)
-
 -- // Another cancellation event
 function tas.minimizeEvent()
 	if tas.var.recording then
