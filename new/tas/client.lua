@@ -1395,8 +1395,13 @@ function tas.dxDebug()
 			end
 			
 			if tas.var.playbacking then
-				left_analog = tas.data[tas.var.play_frame].a.left
-				right_analog = tas.data[tas.var.play_frame].a.right
+				if tas.data[tas.var.play_frame].a then
+					left_analog = tas.data[tas.var.play_frame].a.left
+					right_analog = tas.data[tas.var.play_frame].a.right
+				else
+					left_analog = (left_press and 1) or 0
+					right_analog = (right_press and 1) or 0
+				end
 			end
 			
 			dxDrawImage(screenW/2-offsetX-44, screenH-200+4, 40, 80, tas.textures.triangle, 0, 0, 0, tocolor(200, 200, 200, 200))
