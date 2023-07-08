@@ -69,6 +69,10 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - Well done!
 
 ### 4. Additional Info (FAQ)
+***What's TAS anyway?***
+- TAS is short for *Tool Assisted Speedruns*. Basically, you play the game using special tools to construct your run so that it would get to its goal in the fastest time possible.
+- Although its main use is to have the fastest route, it can also be used to record maps that are difficult to do in one segment.
+
 ***Is it really TAS?***
 - Yes and no.
 - This is not an external software. It's a simple LUA script that can be used on local servers in order for players to achieve some goals that couldn't be able to do before.
@@ -82,8 +86,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - It also includes features that tries to fix any imperfections on the go so it shouldn't be glitchy most of the time.
 
 ***Can you run TAS on public servers?***
-- Is that server yours? If so, just start the resource itself.
-- If not, and you're trying to run it without the owners permission, don't even think about it.
+- TAS is like any other tool that has been made for MTA:SA, so yes, as long as you have the permissions to upload and start resources.
 
 ***Where are my saved runs?***
 - Your runs are stored in mta:sa/mods/deathmatch/priv
