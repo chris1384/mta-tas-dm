@@ -13,12 +13,14 @@ local tas = {
 		play_frame = 0, -- used for table indexing
 		
 		recording = false,
-		recording_fbf = false, -- [UNUSED]
-		fbf_switch = 0, -- [UNUSED]
+		--recording_fbf = false, -- [UNUSED]
+		--fbf_switch = 0, -- [UNUSED]
 		
-		rewinding = false, -- [UNUSED]
+		--rewinding = false, -- [UNUSED]
 		
 		playbacking = false, -- magic happening
+		
+		analog_direction = 0, -- analog wrapper value
 		
 		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
 	},
@@ -26,6 +28,7 @@ local tas = {
 	data = {}, -- run data
 	warps = {}, -- warps
 	entities = {}, -- [UNUSED]
+	textures = {}, -- textures duuh
 	
 	settings = 	{
 	
@@ -43,14 +46,21 @@ local tas = {
 		]]
 		
 		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
-		abortOnInvalidity = false, -- prevent TAS from loading any more lines if it finds an invalid one. can cause missing frames if set to true
+		abortOnInvalidity = false, -- prevent TAS from loading any more lines (when using /loadr) if it finds an invalid one. can cause missing frames if set to true
+		-- //
+		
+		
+		-- // Analog Controls
+		enableAnalog = false, -- [MASTER SWITCH] enable analog controls, compatible with console controllers
+		useAnalogWrapper = false, -- keyboard analog controlling for steering. set 'enableAnalog' to true for this to work. this should be considered as experimental.
+		analogSensitivity = 0.15, -- the steering increase | decrease*1.33 power while using analog control. set 'enableAnalog' to true for this to work. it's associated with 'useAnalogWrapper'
 		-- //
 		
 		
 		-- // Warp Settings
 		warpDelay = 500, -- time until the vehicle resumes from loading a warp
 		resumeDelay = 1500, -- time until the vehicle resumes from the resume command
-		rewindingDelay = 0, -- [UNUSED] time until the vehicle resumes from rewinding
+		--rewindingDelay = 0, -- [UNUSED] time until the vehicle resumes from rewinding
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
@@ -79,8 +89,8 @@ local tas = {
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
 		playbackSpeed = 1, -- change playback speed
 		
-		adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
-		adaptiveThreshold = 6, -- [UNUSED] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
+		--adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
+		--adaptiveThreshold = 6, -- [UNUSED] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
 		
 		useOnlyBinds = false, 
 		--[[ 	
@@ -92,7 +102,7 @@ local tas = {
 		useNitroStates = true, -- check for the nitro state on every frame that has been recorded, it updates in real time but can cause visual bugs during multiplayer gameplay.
 		useVehicleChange = true, -- check for vehicle model on every frame so it would display the correct vehicle every time.
 		
-		allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
+		--allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
 		-- //
 		
 		
@@ -122,14 +132,14 @@ local tas = {
 -- // Registered commands (edit to your liking)
 tas.registered_commands = {	
 	record = "record",
-	record_frame = "recordf", -- [UNUSED]
+	--record_frame = "recordf", -- [UNUSED]
 	playback = "playback",
 	save_warp = "rsw",
 	load_warp = "rlw",
 	delete_warp = "rdw",
-	switch_record = "switchr", -- [UNUSED]
-	next_frame = "nf", -- [UNUSED]
-	previous_frame = "pf", -- [UNUSED]
+	--switch_record = "switchr", -- [UNUSED]
+	--next_frame = "nf", -- [UNUSED]
+	--previous_frame = "pf", -- [UNUSED]
 	load_record = "loadr",
 	save_record = "saver",
 	resume = "resume",
@@ -238,7 +248,9 @@ function tas.init()
 		addCommandHandler(v, tas.commands)
 	end
 	
-	addEventHandler("onClientRender", root, tas.dxDebug)
+	addEventHandler("onClientRender", root, tas.dxDebug, true, "low-1384")
+	
+	tas.textures.triangle = svgCreate(40, 80, [[<svg height="40" width="40"><polygon points="0,20 40,0 40,40" style="fill:white"/></svg>]])
 	
 end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
@@ -281,8 +293,10 @@ addEvent("tas:triggerCommand", true)
 addEventHandler("tas:triggerCommand", root, tas.raceWrap)
 
 -- // Vultaic Wrapper
-function tas.vultaicWrap()
-	tas.raceWrap("Started")
+function tas.vultaicWrap(extra)
+	if extra == nil or extra == 0 then
+		tas.raceWrap("Started")
+	end
 end
 for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown"}) do
 	addEvent(vultaicEvents)
@@ -869,39 +883,6 @@ function tas.commands(cmd, ...)
 				file_additional.author = string_gsub(gettok(gettok(file_data, 2, "\n"), 1, "|"), "# Author: ", "")
 				if not file_additional.author then file_additional.author = "Unknown" end
 				
-				--[[ // Settings part
-				local settings_table = {}
-				local settings_line = tas.ambatublou(file_data, "+settings", "-settings")
-				
-				if settings_line then
-					local settings_data = split(settings_line, "\n")
-					if settings_data and type(settings_data) == "table" and #settings_data >= 1 then
-						
-						local settings_fields = split(settings_data[1], "|")
-						for i=1, #settings_fields do
-							local key, value = gettok(settings_fields[i], 1, "="), gettok(settings_fields[i], 2, "=")
-							value = tonumber(value)
-							if key and value then
-								settings_table[key] = value
-							end
-						end
-					end
-				end
-				
-				if settings_table.fps == nil then
-					if #tas.data > 100 then
-						local stacked, elements = 0, 0
-						for i=2, 100 do
-							stacked = stacked + (tas.data[i].tick - tas.data[i-1].tick)
-							elements = elements + 1
-						end
-						local fps_calculated = 1000/(stacked/elements)
-						tas.var.fps = (fps_calculated>=0 and math.floor(fps_calculated+0.5)) or math.ceil(fps_calculated-0.5)
-					end
-				else
-					tas.var.fps = settings_table.fps
-				end]]
-				
 				if #tas.data > 100 then
 					local stacked, elements = 0, 0
 					for i=2, 100 do
@@ -1040,7 +1021,7 @@ function tas.commands(cmd, ...)
 					value = tonumber(value)
 				elseif value_type == "string" then
 					value = tostring(value)
-				elseif value_type == "bool" then
+				elseif value_type == "boolean" then
 					value = (value == "true")
 				end
 				
@@ -1081,7 +1062,7 @@ function tas.render_record(deltaTime)
 	
 		local total_frames = #tas.data
 	
-		local tick, p, r, v, rv, health, model, nos, keys, ground = tas.record_state(vehicle)
+		local tick, p, r, v, rv, health, model, nos, keys, ground, analog = tas.record_state(vehicle)
 		
 		local previous_frame = tas.data[total_frames]
 		
@@ -1130,6 +1111,7 @@ function tas.render_record(deltaTime)
 			n = nos,
 			k = keys,
 			g = ground,
+			a = analog,
 		})
 								
 	else
@@ -1141,6 +1123,59 @@ function tas.render_record(deltaTime)
 					
 	end
 end
+
+-- // Analog Control Wrap
+
+addEventHandler("onClientPreRender", root, function()
+
+	if tas.settings.enableAnalog and tas.settings.useAnalogWrapper and not tas.var.playbacking then
+	
+		local lefts = getBoundKeys("vehicle_left")
+		local rights = getBoundKeys("vehicle_right")
+		local left_press = false
+		local right_press = false
+		for k,v in pairs(lefts) do
+			if getKeyState(k) then
+				left_press = true
+				break
+			end
+		end
+		for k,v in pairs(rights) do
+			if getKeyState(k) then
+				right_press = true
+				break
+			end
+		end
+		
+		if left_press and right_press then
+			tas.var.analog_direction = 0
+		elseif left_press then
+			if tas.var.analog_direction > 0 then tas.var.analog_direction = 0 end
+			tas.var.analog_direction = math.max(-1, tas.var.analog_direction - tas.settings.analogSensitivity)
+		elseif right_press then
+			if tas.var.analog_direction < 0 then tas.var.analog_direction = 0 end
+			tas.var.analog_direction = math.min(1, tas.var.analog_direction + tas.settings.analogSensitivity)
+		elseif tas.var.analog_direction ~= 0 and not (right_press or left_press) then
+			if tas.var.analog_direction == 0 then
+			elseif tas.var.analog_direction > 0 then
+				tas.var.analog_direction = math.max(0, tas.var.analog_direction - tas.settings.analogSensitivity * 1.333)
+			else
+				tas.var.analog_direction = math.min(0, tas.var.analog_direction + tas.settings.analogSensitivity * 1.333)
+			end
+		end
+		
+		if tas.var.analog_direction == 0 then
+			setAnalogControlState("vehicle_right", 0, false)
+			setAnalogControlState("vehicle_left", 0, false)
+		elseif tas.var.analog_direction > 0 then
+			setAnalogControlState("vehicle_right", tas.var.analog_direction, true)
+		else
+			setAnalogControlState("vehicle_left", -tas.var.analog_direction, true)
+		end
+		
+	end
+	
+end)
 
 -- // Recording vehicle state
 function tas.record_state(vehicle, ped)
@@ -1174,6 +1209,24 @@ function tas.record_state(vehicle, ped)
 			end
 		end
 		
+		local analog = nil
+		if tas.settings.enableAnalog and tas.settings.useAnalogWrapper then
+			if not analog then analog = {left = 0, right = 0} end
+			analog.left = math_abs(math_min(0, tas.var.analog_direction))
+			analog.right = math_abs(math_max(0, tas.var.analog_direction))
+		else
+			local anl = getPedAnalogControlState(localPlayer, "vehicle_left", true)
+			local anr = getPedAnalogControlState(localPlayer, "vehicle_right", true)
+			if anl ~= 0 and anl ~= 1 then
+				if not analog then analog = {left = 0, right = 0} end
+				analog.left = anl
+			end
+			if anr ~= 0 and anl ~= 1 then
+				if not analog then analog = {left = 0, right = 0} end
+				analog.right = anr
+			end
+		end
+		
 		local ground = nil
 		if tas.settings.debugging.detectGround then
 			for i=0,3 do
@@ -1184,7 +1237,7 @@ function tas.record_state(vehicle, ped)
 			end
 		end
 		
-		return real_time, p, r, v, rv, health, model, nos, keys, ground
+		return real_time, p, r, v, rv, health, model, nos, keys, ground, analog
 					
 	end
 end
@@ -1246,8 +1299,16 @@ function tas.render_playback()
 			local rz = tas.lerp_angle(frame_data.r[3], frame_data_next.r[3], inbetweening)
 			setElementRotation(vehicle, rx, ry, rz)
 			
-			setElementVelocity(vehicle, unpack(frame_data.v))
-			setElementAngularVelocity(vehicle, unpack(frame_data.rv))
+			-- // added lerp to these 2 aswell (prob overkill)
+			local vx = tas.lerp(frame_data.v[1], frame_data_next.v[1], inbetweening)
+			local vy = tas.lerp(frame_data.v[2], frame_data_next.v[2], inbetweening)
+			local vz = tas.lerp(frame_data.v[3], frame_data_next.v[3], inbetweening)
+			setElementVelocity(vehicle, vx, vy, vz)
+			
+			local rvx = tas.lerp(frame_data.rv[1], frame_data_next.rv[1], inbetweening)
+			local rvy = tas.lerp(frame_data.rv[2], frame_data_next.rv[2], inbetweening)
+			local rvz = tas.lerp(frame_data.rv[3], frame_data_next.rv[3], inbetweening)
+			setElementAngularVelocity(vehicle, rvx, rvy, rvz)
 			
 			if tas.settings.useVehicleChange then
 				if getElementModel(vehicle) ~= frame_data.m then
@@ -1256,10 +1317,6 @@ function tas.render_playback()
 				end
 			end
 			setElementHealth(vehicle, frame_data.h)
-			
-			if tas.settings.useNitroStates then
-				tas.nos(vehicle, frame_data.n)
-			end
 			
 		end
 		
@@ -1273,6 +1330,29 @@ function tas.render_playback()
 				end
 			end
 		end
+		
+		if frame_data.a then
+		
+			setPedControlState(localPlayer, "vehicle_left", false)
+			setPedControlState(localPlayer, "vehicle_right", false)
+			
+			if frame_data.a.left == 0 and frame_data.a.right == 0 then
+				setAnalogControlState("vehicle_left", 0, false)
+				setAnalogControlState("vehicle_right", 0, false)
+			elseif frame_data.a.left > 0 then
+				setAnalogControlState("vehicle_left", frame_data.a.left, true)
+			elseif frame_data.a.right > 0 then
+				setAnalogControlState("vehicle_right", frame_data.a.right, true)
+			end
+			
+		end
+		
+		if not tas.settings.useOnlyBinds then
+			-- probably this cvar is not needed anymore
+			if tas.settings.useNitroStates then
+				tas.nos(vehicle, frame_data.n)
+			end
+		end
 	
 	else
 		
@@ -1280,7 +1360,7 @@ function tas.render_playback()
 		tas.var.playbacking = false
 		tas.resetBinds()
 		
-		tas.prompt("Playbacking stopped due to an error!", 255, 100, 100)
+		tas.prompt("Playbacking stopped due to an error! (vehicle missing)", 255, 100, 100)
 			
 	end
 end
@@ -1294,14 +1374,42 @@ function tas.dxDebug()
 	
 	if tas.settings.debugging.level >= 1 then
 		
+		local left_press = getPedControlState(localPlayer, "vehicle_left")
+		local right_press = getPedControlState(localPlayer, "vehicle_right")
+		
 		tas.dxKey("W", screenW/2-offsetX, screenH-200, 40, 40, getPedControlState(localPlayer, "accelerate") and tocolor(60, 255, 60, 255))
 		tas.dxKey("S", screenW/2-offsetX, screenH-200+44, 40, 40, getPedControlState(localPlayer, "brake_reverse") and tocolor(255, 150, 50, 255))
-		tas.dxKey("A", screenW/2-offsetX-44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_left") and tocolor(220, 220, 50, 255))
-		tas.dxKey("D", screenW/2-offsetX+44, screenH-200+44, 40, 40, getPedControlState(localPlayer, "vehicle_right") and tocolor(220, 220, 50, 255))
 		tas.dxKey("FIRE", screenW/2-offsetX-64, screenH-200+88, 60, 40, (getPedControlState(localPlayer, "vehicle_fire") or getPedControlState(localPlayer, "vehicle_secondary_fire")) and tocolor(60, 200, 255, 255))
 		tas.dxKey("SPACE", screenW/2-offsetX, screenH-200+88, 160, 40, getPedControlState(localPlayer, "handbrake") and tocolor(255, 60, 60, 255))
 		tas.dxKey("ᐱ", screenW/2-offsetX+120, screenH-200, 40, 40, getPedControlState(localPlayer, "steer_forward") and tocolor(255, 80, 255, 255))
 		tas.dxKey("ᐯ", screenW/2-offsetX+120, screenH-200+44, 40, 40, getPedControlState(localPlayer, "steer_back") and tocolor(255, 80, 255, 255))
+		
+		if tas.settings.enableAnalog then
+		
+			local left_analog = math_abs(math_min(0, tas.var.analog_direction)) 
+			local right_analog = math_abs(math_max(0, tas.var.analog_direction))
+			
+			if not tas.settings.useAnalogWrapper then
+				left_analog = getAnalogControlState("vehicle_left", true)
+				right_analog = getAnalogControlState("vehicle_right", true)
+			end
+			
+			if tas.var.playbacking then
+				left_analog = tas.data[tas.var.play_frame].a.left
+				right_analog = tas.data[tas.var.play_frame].a.right
+			end
+			
+			dxDrawImage(screenW/2-offsetX-44, screenH-200+4, 40, 80, tas.textures.triangle, 0, 0, 0, tocolor(200, 200, 200, 200))
+			dxDrawImage(screenW/2-offsetX+44, screenH-200+4, 40, 80, tas.textures.triangle, 180, 0, 0, tocolor(200, 200, 200, 200))
+			dxDrawImageSection(screenW/2-offsetX-44+40*(1-left_analog), screenH-200+4, 40*(left_analog), 80, 40*(1-left_analog), 0, 40*(left_analog), 80, tas.textures.triangle, 0, 0, 0, tocolor(220, 220, 50, 255))
+			dxDrawImageSection(screenW/2-offsetX+44, screenH-200+4, 40*(right_analog), 80, 40*(1-right_analog), 0, 40*(right_analog), 80, tas.textures.triangle, 180, 0, 0, tocolor(220, 220, 50, 255))
+			
+			dxDrawText(string_format("%.1f", left_analog), screenW/2-offsetX-44, screenH-200+4, screenW/2-offsetX-44+50, screenH-200+4+80, tocolor(0, 0, 0, 255), 1.384, "default-bold", "center", "center")
+			dxDrawText(string_format("%.1f", right_analog), screenW/2-offsetX+44, screenH-200+4, screenW/2-offsetX+44+30, screenH-200+4+80, tocolor(0, 0, 0, 255), 1.384, "default-bold", "center", "center")
+		else
+			tas.dxKey("A", screenW/2-offsetX-44, screenH-200+44, 40, 40, left_press and tocolor(220, 220, 50, 255))
+			tas.dxKey("D", screenW/2-offsetX+44, screenH-200+44, 40, 40, right_press and tocolor(220, 220, 50, 255))
+		end
 		
 	end
 	
@@ -1401,7 +1509,6 @@ function tas.pathWay()
 		if tas_warps_total >= 1 then
 			for i=1, tas_warps_total do
 				local x, y, z = unpack(tas.warps[i].p)
-				--local vx, vy, vz = unpack(tas.data[i].v)
 				dxDrawLine3D(x, y, z+1, x, y, z+1.7, tocolor(255, 180, 60, 255), 5)
 				
 				local swX, swY = getScreenFromWorldPosition(x, y, z+1.9, 2)
@@ -1434,6 +1541,8 @@ function tas.resetBinds()
 	for _,v in pairs(tas.registered_keys) do
 		setPedControlState(localPlayer, v, false)
 	end
+	setAnalogControlState("vehicle_right", 0, false)
+	setAnalogControlState("vehicle_left", 0, false)
 end
 
 -- // Command messages
@@ -1452,7 +1561,7 @@ function tas.prompt(text, r, g, b)
 	end
 end
 
--- // Useful
+-- // Linear interpolation between 2 values
 function tas.lerp(a, b, t)
 	return a + t * (b - a)
 end
