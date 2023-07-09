@@ -48,6 +48,8 @@ local tas = {
 		
 		useWarnings = true, -- restrict the player from doing mistakes. if it gets annoying, set this to false
 		abortOnInvalidity = false, -- prevent TAS from loading any more lines (when using /loadr) if it finds an invalid one. can cause missing frames if set to true
+		
+		hunterFinish = false, -- stop recording/playbacking as soon as the player has reached the hunter (model change detection). setting this to true can have undesired effects while gameplaying.
 		-- //
 		
 		
@@ -622,14 +624,10 @@ function tas.commands(cmd, ...)
 		local seek_number = 1
 		if args[1] ~= nil then
 			seek_number = tonumber(args[1])
-			if not seek_number or not tas.data[seek_number] or seek_number < 1 or seek_number > #tas.data then
-				tas.prompt("Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) return
+			if not seek_number or not tas.data[seek_number] or seek_number < 1 or seek_number > #tas.data - 1 then
+				tas.prompt("Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) 
+				return
 			end
-		end
-		
-		if not tas.var.playbacking then
-			tas.var.playbacking = true
-			addEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 		end
 		
 		tas.var.play_frame = seek_number
@@ -642,6 +640,16 @@ function tas.commands(cmd, ...)
 			setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
 			setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
 			setElementAngularVelocity(vehicle, unpack(tas.data[tas.var.play_frame].rv))
+		end
+		
+		if getElementModel(vehicle) ~= tas.data[tas.var.play_frame].m then
+			setElementModel(vehicle, tas.data[tas.var.play_frame].m)
+			triggerServerEvent("tas:onModelChange", vehicle, tas.data[tas.var.play_frame].m)
+		end
+
+		if not tas.var.playbacking then
+			tas.var.playbacking = true
+			addEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
 		end
 		
 		tas.prompt("Seek to frame $$#"..seek_number.."##.", 100, 100, 255)
@@ -1073,6 +1081,24 @@ function tas.render_record(deltaTime)
 	
 	if vehicle then
 	
+		local model = getElementModel(vehicle)
+		
+		if tas.settings.hunterFinish then
+			if model == 425 then
+			
+				removeEventHandler("onClientPreRender", root, tas.render_record)
+				tas.var.recording = false
+				
+				for i=1, 3 do
+					tas.data[#tas.data] = nil
+				end
+		
+				tas.prompt("Hunter has been reached! Stopped recording. ($$#"..tostring(#tas.data).." ##frames)", 100, 255, 100)
+				
+				return
+			end
+		end
+	
 		local total_frames = #tas.data
 		
 		-- // I don't like this part, at all
@@ -1091,7 +1117,7 @@ function tas.render_record(deltaTime)
 				setElementAngularVelocity(vehicle, unpack(frame_data.rv))
 				
 				if tas.settings.useVehicleChange then
-					if getElementModel(vehicle) ~= frame_data.m then
+					if model ~= frame_data.m then
 						setElementModel(vehicle, frame_data.m)
 						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
 					end
@@ -1410,10 +1436,25 @@ function tas.render_playback()
 			setElementAngularVelocity(vehicle, rvx, rvy, rvz)
 			
 			if tas.settings.useVehicleChange then
-				if getElementModel(vehicle) ~= frame_data.m then
+			
+				local model = getElementModel(vehicle)
+				
+				if tas.settings.hunterFinish then
+					if model == 425 or frame_data.m == 425 then
+						removeEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
+						tas.var.playbacking = false
+						tas.resetBinds()
+						
+						tas.prompt("Hunter has been reached! Stopped playbacking.", 100, 100, 255)
+						return
+					end
+				end
+				
+				if model ~= frame_data.m then
 					setElementModel(vehicle, frame_data.m)
 					triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
 				end
+				
 			end
 			setElementHealth(vehicle, frame_data.h)
 			
@@ -1528,7 +1569,7 @@ function tas.dxDebug()
 		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 1)
 		
 		local tick_var = nil
-		if tas.var.playbacking == true then tick_var = "#"..tostring(tas.data[tas.var.play_frame].tick) else tick_var = "N/A" end
+		if tas.var.playbacking == true then tick_var = string_format("#%d", tas.data[tas.var.play_frame].tick) else tick_var = "N/A" end
 		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*5, 1)
 		
 		tas.pathWay()
