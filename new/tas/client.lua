@@ -5,6 +5,7 @@
 
 -- // the root of your problems
 local tas = {
+
 	-- // hardcoded variables, do not edit
 	var = 	{
 		record_tick = 0, -- used to store frame ticks for smooth playback. it's associated with 'playbackInterpolation'
@@ -16,7 +17,7 @@ local tas = {
 		--recording_fbf = false, -- [UNUSED]
 		--fbf_switch = 0, -- [UNUSED]
 		
-		--rewinding = false, -- [UNUSED]
+		rewinding = false, -- rewind phase
 		
 		playbacking = false, -- magic happening
 		
@@ -60,7 +61,6 @@ local tas = {
 		-- // Warp Settings
 		warpDelay = 500, -- time until the vehicle resumes from loading a warp
 		resumeDelay = 1500, -- time until the vehicle resumes from the resume command
-		--rewindingDelay = 0, -- [UNUSED] time until the vehicle resumes from rewinding
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
@@ -75,6 +75,9 @@ local tas = {
 			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
 			DO NOT RECORD WITH FPS HIGHER THAN 75, IT CAN CAUSE MASSIVE BUGS!!!
 		]]
+		
+		rewindingKey = "backspace", -- registered key for rewinding
+		rewindingDelay = 0, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
 		-- //
 		
 		
@@ -99,6 +102,7 @@ local tas = {
 			keep in mind that any lagspike can severely affect the playback. for that, use adaptiveInterpolation. [UNUSED]
 			not recommended while showcasing maps and it's mainly used for debugging
 		]]
+		
 		useNitroStates = true, -- check for the nitro state on every frame that has been recorded, it updates in real time but can cause visual bugs during multiplayer gameplay.
 		useVehicleChange = true, -- check for vehicle model on every frame so it would display the correct vehicle every time.
 		
@@ -126,7 +130,7 @@ local tas = {
 		-- //
 		
 	},
-	timers = {}, -- warp load, resume timer, warning timers etc.
+	timers = {}, -- warp, resume, rewind, warning timers
 }
 			
 -- // Registered commands (edit to your liking)
@@ -326,6 +330,7 @@ function tas.commands(cmd, ...)
 		if not vehicle then tas.prompt("Recording failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
 			if not tas.var.recording and not tas.timers.warnRecord then
@@ -374,6 +379,7 @@ function tas.commands(cmd, ...)
 		if #tas.data < 1 then tas.prompt("Playbacking failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.var.recording then tas.prompt("Playbacking failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Playbacking failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Playbacking failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		if tas.var.playbacking then
 			removeEventHandler((tas.settings.playbackPreRender == true and "onClientPreRender" or "onClientRender"), root, tas.render_playback)
@@ -403,6 +409,7 @@ function tas.commands(cmd, ...)
 		if not vehicle then tas.prompt("Saving warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Saving warp failed, please wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Saving warp failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Saving warp failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local _, p, r, v, rv, health, model, nos, keys = tas.record_state(vehicle)
 		local tick = nil
@@ -435,6 +442,7 @@ function tas.commands(cmd, ...)
 		if #tas.warps == 0 then tas.prompt("Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Loading warp failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Loading warp failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local warp_number = #tas.warps
 		if args[1] ~= nil then
@@ -534,6 +542,7 @@ function tas.commands(cmd, ...)
 		if not vehicle then tas.prompt("Resuming failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if #tas.data < 1 then tas.prompt("Resuming failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Resuming failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Resuming failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Resuming failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.var.fps ~= nil then
 			if getFPSLimit() ~= tas.var.fps then 
@@ -608,6 +617,7 @@ function tas.commands(cmd, ...)
 		if #tas.data < 1 then tas.prompt("Seeking failed, no $$recorded data ##found!", 255, 100, 100) return end
 		if tas.var.recording or tas.timers.resume_load then tas.prompt("Seeking failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Seeking failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Seeking failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local seek_number = 1
 		if args[1] ~= nil then
@@ -732,6 +742,7 @@ function tas.commands(cmd, ...)
 		if tas.var.playbacking then tas.prompt("Loading record failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Loading record failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Loading record failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Loading record failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
@@ -938,13 +949,14 @@ function tas.commands(cmd, ...)
 		
 		tas.prompt("Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
 	
-	-- // Clear all data.
+	-- // Clear all data
 	elseif cmd == tas.registered_commands.clear_all then
 	
 		if tas.var.recording then tas.prompt("Clearing all data failed, stop $$recording ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Clearing all data failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Clearing all data failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Clearing all data failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		if #tas.data == 0 and #tas.warps == 0 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
@@ -1045,6 +1057,7 @@ function tas.commands(cmd, ...)
 		tas.prompt("/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.resume.." $$| ##/"..tas.registered_commands.seek.." $$- ##resume $$| ##seek from a frame", 255, 100, 100)
+		tas.prompt(tas.settings.rewindingKey:upper().." $$- ##rewind during recording", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
@@ -1061,6 +1074,92 @@ function tas.render_record(deltaTime)
 	if vehicle then
 	
 		local total_frames = #tas.data
+		
+		-- // I don't like this part, at all
+		if getKeyState(tas.settings.rewindingKey) then
+		
+			if not (tas.timers.load_warp or tas.timers.resume_load) then
+			
+				tas.var.rewinding = true
+				
+				local frame_data = tas.data[total_frames-1]
+				tas.var.record_tick = getTickCount() - frame_data.tick
+				
+				setElementPosition(vehicle, unpack(frame_data.p))
+				setElementRotation(vehicle, unpack(frame_data.r))
+				setElementVelocity(vehicle, unpack(frame_data.v))
+				setElementAngularVelocity(vehicle, unpack(frame_data.rv))
+				
+				if tas.settings.useVehicleChange then
+					if getElementModel(vehicle) ~= frame_data.m then
+						setElementModel(vehicle, frame_data.m)
+						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+					end
+				end
+				setElementHealth(vehicle, frame_data.h)
+				
+				if tas.settings.useNitroStates then
+					tas.nos(vehicle, frame_data.n)
+				end
+				
+				if tas.warps[#tas.warps] ~= nil then
+					if tas.warps[#tas.warps].tick == nil or tas.warps[#tas.warps].tick > frame_data.tick then
+						tas.warps[#tas.warps] = nil
+					end
+				end
+				
+				if total_frames > 2 then
+					tas.data[total_frames] = nil
+				end
+				return
+				
+			end
+			
+		else
+		
+			if tas.var.rewinding then
+			
+				tas.var.rewinding = false
+				
+				if tas.timers.rewind_load then
+					if isTimer(tas.timers.rewind_load) then
+						killTimer(tas.timers.rewind_load)
+					end
+					tas.timers.rewind_load = nil
+				end
+				
+				if tas.settings.rewindingDelay > 50 then
+					tas.timers.rewind_load = setTimer(function() tas.timers.rewind_load = nil end, tas.settings.rewindingDelay, 1)
+				end
+				
+			end
+			
+			if tas.timers.rewind_load then
+			
+				local frame_data = tas.data[total_frames]
+				tas.var.record_tick = getTickCount() - frame_data.tick
+				
+				setElementPosition(vehicle, unpack(frame_data.p))
+				setElementRotation(vehicle, unpack(frame_data.r))
+				setElementVelocity(vehicle, unpack(frame_data.v))
+				setElementAngularVelocity(vehicle, unpack(frame_data.rv))
+				
+				if tas.settings.useVehicleChange then
+					if getElementModel(vehicle) ~= frame_data.m then
+						setElementModel(vehicle, frame_data.m)
+						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+					end
+				end
+				setElementHealth(vehicle, frame_data.h)
+				
+				if tas.settings.useNitroStates then
+					tas.nos(vehicle, frame_data.n)
+				end
+				
+				return
+			end
+			
+		end
 	
 		local tick, p, r, v, rv, health, model, nos, keys, ground, analog = tas.record_state(vehicle)
 		
@@ -1091,7 +1190,7 @@ function tas.render_record(deltaTime)
 						
 						if tas.settings.debugging.level >= 2 then
 							tas.data[total_frames].fixed = true
-							tas.prompt("Lag detected, rewriting previous ticks..", 255, 150, 0)
+							tas.prompt("Lag detected on frame $$#"..tostring(total_frames).."##, rewriting previous ticks..", 255, 150, 0)
 						end
 					
 					end
@@ -1420,7 +1519,7 @@ function tas.dxDebug()
 	
 	if tas.settings.debugging.level >= 2 then
 	
-		local recording_extra = (tas.timers.load_warp ~= nil and "(LOADING WARP..)") or (tas.timers.resume_load ~= nil and "(RESUMING..)") or ""
+		local recording_extra = (tas.timers.load_warp ~= nil and "(LOADING WARP..)") or (tas.var.rewinding == true and "(REWINDING..)") or (tas.timers.rewind_load ~= nil and "(RESUMING REWINDING..)") or (tas.timers.resume_load ~= nil and "(RESUMING..)") or ""
 	
 		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200+18*0, 1)
 		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*1, 1)
