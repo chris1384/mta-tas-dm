@@ -1,11 +1,11 @@
 <a href='https://lua.org' target="_blank"><img alt='lua' src='https://img.shields.io/badge/mom_i made it in lua-100000?style=plastic&logo=lua&logoColor=white&labelColor=5C5C5C&color=5E56FF'/></a>
 
-### NOTE: THIS RESOURCE IS NOT INTENDED FOR CHEATING! ANY REQUESTS REGARDING TAS IMPLEMENTATION ON OTHER SERVERS/PROVIDING SERVER VULNERABILITIES IS NOT TOLERATED AND WILL BE IGNORED!
+### NOTE: THIS RESOURCE IS NOT INTENDED FOR CHEATING! ANY REQUEST REGARDING TAS IMPLEMENTATION ON OTHER SERVERS/PROVIDING SERVER VULNERABILITIES IS NOT TOLERATED AND WILL BE IGNORED!
 
 ## Recording & Seamless Segmenting Run Tool v1.4 for MTA:SA
 ### by chris1384 @2020
 
-This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstration purposes.
+This is a resource intended for creating segmented runs for (hard) deathmatch racing maps. Should only be used for demonstrational purposes.
 
 Back in 2020, I've worked on a script that undos the whole run you've made if you did a mistake. I've always been dreaming about getting TAS scripts working with MTA:SA, but due to RenderWare random movement and calculations, the only way to make this sort of tool was to record every frame in real time, which manually adding inputs to a file was impossible.
 
@@ -70,14 +70,14 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 
 ### 4. Additional Info (FAQ)
 ***What's TAS anyway?***
-- TAS is short for *Tool Assisted Speedruns*. Basically, you play the game using special tools to construct your run so that it would get to its goal in the fastest time possible.
+- TAS is short for *Tool Assisted Speedrun*. Basically, you play the game using special tools to construct your run so that it would get to its goal in the fastest time possible.
 - Although its main use is to have the fastest route, it can also be used to record maps that are difficult to do in one segment.
 
 ***Is it really TAS?***
 - Yes and no.
 - This is not an external software. It's a simple LUA script that can be used on local servers in order for players to achieve some goals that couldn't be able to do before.
 - Since GTA:SA depends entirely on random movement. It's impossible to map the keys for every frame and expect to run it the same every time. These actions are not as deterministic as they are in Trackmania.
-- So in order to achieve a perfect playback, position and rotation of the vehicle are also used to manage these perfect runs. You can test the randomness by disabling helper functions and playback your run using only keys: ***/tascvar bool useOnlyBinds true***
+- So in order to achieve a perfect playback, position and rotation of the vehicle are also used to manage these perfect runs. You can test the randomness by disabling helper functions and playback your run using only keys: ***/tascvar useOnlyBinds true***
   
 ***Differences between TAS and other Recording scripts***
 - Almost every recording script that has been made in the past are meant to be used exclusively on the Map Editor.
@@ -91,7 +91,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 ***Where are my saved runs?***
 - Your runs are stored in mta:sa/mods/deathmatch/priv
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
-- This option can be changed in version 1.4 using the following command: ***/tascvar bool usePrivateFolder false***
+- This option can be changed in version 1.4 using the following command: ***/tascvar usePrivateFolder false***
 
 ## Something you would want implemented or got any bugs? Fill out a form in the Issues section!
 ## For any additional help, please contact me on Discord: *chrisu#9616* (or just chris1384) or on MTA:SA forums (chris1384).
