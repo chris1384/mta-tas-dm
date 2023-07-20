@@ -88,11 +88,11 @@ local tas = {
 		--[[
 			use the preRender event instead of the regular one. this can affect the position of a vehicle whenever it's intersecting with an object at high speed.
 			by setting this to true, you can essentially avoid any extra movement at the final frame, meaning what has been recorded previously, will be played back without any imperfections. 
-			unfortunately, ped position rendering is done in a separate processing order and might look out of place when playbacking.
+			unfortunately, ped position rendering is done in a separate processing order and might look out of place when playbacking. (doesn't work using a separate render event, positions are updated in preRender)
 		]]
 		
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
-		playbackSpeed = 1, -- change playback speed
+		playbackSpeed = 1, -- change playback speed, it's associated with 'playbackInterpolation'
 		
 		--adaptiveInterpolation = false, -- [UNUSED] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
 		--adaptiveThreshold = 6, -- [UNUSED] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
@@ -106,6 +106,7 @@ local tas = {
 		]]
 		
 		useNitroStates = true, -- check for the nitro state on every frame that has been recorded, it updates in real time but can cause visual bugs during multiplayer gameplay.
+		useHealthStates = true, -- always set health to the vehicle using the stored HP value from the recording. setting this to false might cause unintended playback errors.
 		useVehicleChange = true, -- check for vehicle model on every frame so it would display the correct vehicle every time.
 		
 		--allowPlaybackRewinding = false, -- [UNUSED] enable the rewind function during playbacking
@@ -402,6 +403,14 @@ function tas.commands(cmd, ...)
 				setElementAngularVelocity(vehicle, unpack(tas.data[tas.var.play_frame].rv))
 			end
 			
+			if tas.settings.useNitroStates then
+				tas.nos(vehicle, tas.data[tas.var.play_frame].n)
+			end
+			
+			if tas.settings.useHealthStates then
+				setElementHealth(vehicle, tas.data[tas.var.play_frame].h)
+			end
+			
 			tas.prompt("Playbacking started!", 100, 100, 255)
 		end
 	
@@ -640,6 +649,14 @@ function tas.commands(cmd, ...)
 			setElementRotation(vehicle, unpack(tas.data[tas.var.play_frame].r))
 			setElementVelocity(vehicle, unpack(tas.data[tas.var.play_frame].v))
 			setElementAngularVelocity(vehicle, unpack(tas.data[tas.var.play_frame].rv))
+		end
+		
+		if tas.settings.useNitroStates then
+			tas.nos(vehicle, tas.data[tas.var.play_frame].n)
+		end
+		
+		if tas.settings.useHealthStates then
+			setElementHealth(vehicle, tas.data[tas.var.play_frame].h)
 		end
 		
 		if getElementModel(vehicle) ~= tas.data[tas.var.play_frame].m then
