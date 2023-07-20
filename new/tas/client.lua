@@ -1139,7 +1139,10 @@ function tas.render_record(deltaTime)
 						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
 					end
 				end
-				setElementHealth(vehicle, frame_data.h)
+				
+				if tas.settings.useHealthStates then
+					setElementHealth(vehicle, frame_data.h)
+				end
 				
 				if tas.settings.useNitroStates then
 					tas.nos(vehicle, frame_data.n)
