@@ -80,6 +80,8 @@ local tas = {
 		
 		rewindingKey = "backspace", -- registered key for rewinding
 		rewindingDelay = 0, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
+		
+		replaceBlow = false, -- prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3, can help up during recording
 		-- //
 		
 		
@@ -267,58 +269,6 @@ function tas.stop()
 	tas.resetBinds()
 end
 addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
-
--- // Stop recording on FPS change
-function tas.changeFPSEvent(_, _, _, _, _, fps)
-	if tas.var.recording then
-		removeEventHandler("onClientPreRender", root, tas.render_record)
-		tas.var.recording = false
-		tas.prompt("Recording stopped because of FPS change "..tostring(tas.var.fps).." $$=> ##"..tostring(fps).."! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
-	end
-end
-addDebugHook("preFunction", tas.changeFPSEvent, {"setFPSLimit"})
-
--- // Custom Race Events
-function tas.raceWrap(event)
-	if not tas.settings.trigger_mapStart then return end
-	if event == "Started" then
-		if tas.var.recording or tas.var.playbacking then return end
-		if #tas.data > 0 then
-			executeCommandHandler(tas.registered_commands.playback)
-		else
-			executeCommandHandler(tas.registered_commands.record)
-		end
-	elseif event == "Stop" then
-		if tas.var.recording then
-			executeCommandHandler(tas.registered_commands.record)
-		elseif tas.var.playbacking then
-			executeCommandHandler(tas.registered_commands.playback)
-		end
-	end
-end
-addEvent("tas:triggerCommand", true)
-addEventHandler("tas:triggerCommand", root, tas.raceWrap)
-
--- // Vultaic Wrapper
-function tas.vultaicWrap(extra)
-	if extra == nil or extra == 0 then
-		tas.raceWrap("Started")
-	end
-end
-for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown"}) do
-	addEvent(vultaicEvents)
-	addEventHandler(vultaicEvents, root, tas.vultaicWrap)
-end
-
--- // Another cancellation event
-function tas.minimizeEvent()
-	if tas.var.recording then
-		removeEventHandler("onClientPreRender", root, tas.render_record)
-		tas.var.recording = false
-		tas.prompt("Recording stopped due to the minimize event! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
-	end
-end
-addEventHandler("onClientMinimize", root, tas.minimizeEvent)
 
 -- // Event Commands
 function tas.commands(cmd, ...) 
@@ -1726,21 +1676,71 @@ function tas.prompt(text, r, g, b)
 	end
 end
 
--- // Linear interpolation between 2 values
-function tas.lerp(a, b, t)
-	return a + t * (b - a)
+-- // Custom Race Events
+function tas.raceWrap(event)
+	if not tas.settings.trigger_mapStart then return end
+	if event == "Started" then
+		if tas.var.recording or tas.var.playbacking then return end
+		if #tas.data > 0 then
+			executeCommandHandler(tas.registered_commands.playback)
+		else
+			executeCommandHandler(tas.registered_commands.record)
+		end
+	elseif event == "Stop" then
+		if tas.var.recording then
+			executeCommandHandler(tas.registered_commands.record)
+		elseif tas.var.playbacking then
+			executeCommandHandler(tas.registered_commands.playback)
+		end
+	end
+end
+addEvent("tas:triggerCommand", true)
+addEventHandler("tas:triggerCommand", root, tas.raceWrap)
+
+-- // Vultaic Wrapper
+function tas.vultaicWrap(extra)
+	if extra == nil or extra == 0 then
+		tas.raceWrap("Started")
+	end
+end
+for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown"}) do
+	addEvent(vultaicEvents)
+	addEventHandler(vultaicEvents, root, tas.vultaicWrap)
 end
 
--- // Keep value between min and max
-function tas.clamp(st, v, fn)
-	return math_max(st, math_min(v, fn))
+-- // Another cancellation event
+function tas.minimizeEvent()
+	if tas.var.recording then
+		removeEventHandler("onClientPreRender", root, tas.render_record)
+		tas.var.recording = false
+		tas.prompt("Recording stopped due to the minimize event! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+	end
 end
+addEventHandler("onClientMinimize", root, tas.minimizeEvent)
 
--- // Lerp angle
-function tas.lerp_angle(st, nd, prog)
-	local delta = (nd - st + 180) % 360 - 180
-	return (st + delta * prog) % 360
+-- // Stop recording on FPS change
+function tas.changeFPSEvent(_, _, _, _, _, fps)
+	if tas.var.recording then
+		removeEventHandler("onClientPreRender", root, tas.render_record)
+		tas.var.recording = false
+		tas.prompt("Recording stopped because of FPS change "..tostring(tas.var.fps).." $$=> ##"..tostring(fps).."! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+	end
 end
+addDebugHook("preFunction", tas.changeFPSEvent, {"setFPSLimit"})
+
+-- // Overdrive 3 anti-sc
+function tas.killOnSc(_, _, _, _, _, vehicle)
+	if tas.var.recording then
+		if getVehicleController(vehicle) == localPlayer then
+			setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
+			setElementVelocity(vehicle, 0, 0, 0)
+			setElementRotation(vehicle, 180, 0, 90) 
+			
+			return "skip"
+		end
+	end
+end
+addDebugHook("preFunction", tas.killOnSc, {"blowVehicle"})
 
 -- // Nitro detection and modify stats (playback and load warp)
 function tas.nos(vehicle, data)
@@ -1761,7 +1761,23 @@ function tas.nos(vehicle, data)
 	end
 end
 
--- // Shortcut
+-- // Linear interpolation between 2 values
+function tas.lerp(a, b, t)
+	return a + t * (b - a)
+end
+
+-- // Keep value between min and max
+function tas.clamp(st, v, fn)
+	return math_max(st, math_min(v, fn))
+end
+
+-- // Lerp angle
+function tas.lerp_angle(st, nd, prog)
+	local delta = (nd - st + 180) % 360 - 180
+	return (st + delta * prog) % 360
+end
+
+-- // Accurate get player vehicle
 function tas.cveh(player)
 	local vehicle = getPedOccupiedVehicle(player)
 	if vehicle and getVehicleController(vehicle) == player then
