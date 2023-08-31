@@ -25,16 +25,32 @@ It is a complete remake over the old one. It might have a better overall perform
 - saving and loading records
 
 ## Tutorial
-### 1. Installation
+### 1. Downloading (for dummies)
+- Press the green button that shows Code.
+- Select 'Download ZIP'.
+
+### 1.1 Installation
 ***You must have a working MTA:SA server and existing resources folder.***
 - Locate your MTA:SA main folder,
 - Travel to mta:sa/server/mods/deathmatch,
-- Paste *mta-tas-dm* folder in the resources folder,
+- Choose one of the versions of TAS to install ('new' is recommended)
+- Paste *tas* folder in the resources folder,
 - Open your server or type *refresh* in the server console if it's already running,
 - Type *start mta-tas-dm* in the server console,
 - You should see an output about the resource that got started.
 
 - Done!
+
+### 1.2 Configuration and file briefing
+***- client.lua***
+- *client.lua* file contains everything that makes TAS running.
+- Open it using Notepad or your preferred IDE (recommended/Notepad++) to see helpful notes inside.
+- CVARs can be modified directly from the file itself without changing them manually using /tascvar (see tas.settings array for info)
+
+***- server.lua***
+- *server.lua* is used for events regarding model changes and race events (used in Auto-TAS).
+
+- That's it
 
 ### 2. Commands
 ***You can also experiment with the resource on a freeroam gamemode, just to get the feel of it.***
@@ -42,14 +58,14 @@ It is a complete remake over the old one. It might have a better overall perform
 - Typing /tashelp will show you a list of commands:
 ```
 /record - start regular, real-time recording
-/recordf - start frame-by-frame recording
 /playback - start playbacking the run you've recorded
-/switchr - switch between regular and frame-by-frame recording
 /rsw - save warp
 /rlw [ID] - load warp
 /rdw - delete latest warp
-/nf [frames] - set next frame while frame-by-frame recording
-/pf - delete the latest frame while frame-by-frame recording
+1.3* /recordf - start frame-by-frame recording
+1.3* /switchr - switch between regular and frame-by-frame recording
+1.3* /nf [frames] - set next frame while frame-by-frame recording
+1.3* /pf - delete the latest frame while frame-by-frame recording
 /resume [frame number] - continue the recording (from a frame number)
 /seek [frame number] - seek to a frame while playbacking
 BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it up | +Left Alt to slow it down)
@@ -58,6 +74,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 /autotas - toggle Auto-TAS (trigger record or playback on map start)
 /clearall - clear all data
 /debugr [level] - toggle debugging
+1.4* /tascvar [key] [value] - change settings in-game (use '/tascvar show' to see all commands)
 ```
 
 ### 3. Using the tool (example)
@@ -89,7 +106,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 - TAS is like any other tool that has been made for MTA:SA, so yes, as long as you have the permissions to upload and start resources.
 
 ***Where are my saved runs?***
-- Your runs are stored in mta:sa/mods/deathmatch/priv
+- .TAS files are saved as private data, these are stored in *MTA San Andreas/mods/deathmatch/priv*
 - Search for the resource name and you'll be able to find the resource, along with the saved runs folder.
 - This option can be changed in version 1.4 using the following command: ***/tascvar usePrivateFolder false***
 
