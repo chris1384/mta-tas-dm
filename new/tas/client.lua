@@ -18,6 +18,7 @@ local tas = {
 		--fbf_switch = 0, -- [UNUSED]
 		
 		rewinding = false, -- rewind phase
+		rewind_cache = 0, -- used for slow rewind
 		
 		playbacking = false, -- magic happening
 		
@@ -31,6 +32,7 @@ local tas = {
 	entities = {}, -- [UNUSED]
 	textures = {}, -- textures duuh
 	
+	-- // Settings incoming, these can be edited here directly or using the in-game command (/tascvar)
 	settings = 	{
 	
 		-- // General
@@ -62,7 +64,7 @@ local tas = {
 		
 		-- // Warp Settings
 		warpDelay = 500, -- time until the vehicle resumes from loading a warp
-		resumeDelay = 1500, -- time until the vehicle resumes from the resume command
+		resumeDelay = 2000, -- time until the vehicle resumes from the resume command
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
 		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
@@ -79,9 +81,10 @@ local tas = {
 		]]
 		
 		rewindingKey = "backspace", -- registered key for rewinding
-		rewindingDelay = 0, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
+		rewindingDelay = 1500, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
+		rewindingCameraReset = false, -- reset the camera position after the rewind phase
 		
-		replaceBlow = false, -- prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3, can help up during recording
+		replaceBlow = true, -- prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3, can help up during recording
 		-- //
 		
 		
@@ -115,7 +118,7 @@ local tas = {
 		-- //
 		
 		
-		-- // Debugging Settings
+		-- // Debugging (uneditable in-game)
 		debugging = {
 			level = 0,
 			--[[
@@ -124,11 +127,15 @@ local tas = {
 				1. basic (key controls only, convenient for tutorial runs)
 				2. advanced (key controls, pathway and (chat) info)
 				3. thorough (controls, pathway and full info about frames [LAGGY MESS])
+				
+				use /debugr to toggle
 			]]
 			offsetX = 0, -- offset for hud
 			
 			frameSkipping = 15, -- optimize the pathway when you're not playbacking
 			wholeFrameClipDistance = 200, -- farClipDistance for full frames, so it won't display everything.
+			
+			warpsRenderLevel = 3, -- at which debug-level should warps start rendering (text and marker)
 			
 			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
@@ -671,7 +678,7 @@ function tas.commands(cmd, ...)
 					keys = table_concat(run.k, ",")
 				end
 				
-				fileWrite(save_file, string_format("%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s|%s", run.tick, run.p[1], run.p[2], run.p[3], run.r[1], run.r[2], run.r[3], run.v[1], run.v[2], run.v[3], tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, keys).."\n")
+				fileWrite(save_file, string_format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, keys).."\n")
 			end
 			
 			fileWrite(save_file, "-run\n")
@@ -691,23 +698,17 @@ function tas.commands(cmd, ...)
 					end
 					
 					if warp.tick then
-						fileWrite(save_file, string_format("%d|%d|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%.04f,%.04f,%.04f|%d|%d|%s", warp.frame, warp.tick, warp.p[1], warp.p[2], warp.p[3], warp.r[1], warp.r[2], warp.r[3], warp.v[1], warp.v[2], warp.v[3], tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
 					end
 					
 				end
 				fileWrite(save_file, "-warps")
 			end
 			-- //
-
-			--[[ // Settings part
-			fileWrite(save_file, "+settings\n")
-			fileWrite(save_file, "fps "..tostring(tas.var.fps))
-			fileWrite(save_file, "-settings")
-			-- //]]
 			
 			fileClose(save_file)
 			
-			tas.prompt("Your run has been saved to 'saves/"..args[1]..".tas'", 255, 255, 100)
+			tas.prompt("Your run has been saved ".. (tas.settings.usePrivateFolder == true and "$$privately ##" or "").."to $$'saves/"..args[1]..".tas'##!", 255, 255, 100)
 		end
 	
 	-- // Load Recording
@@ -962,7 +963,7 @@ function tas.commands(cmd, ...)
 		if debug_number == 1 then
 			tas.settings.debugging.offsetX = 60
 		elseif debug_number >= 2 then
-			tas.settings.debugging.offsetX = 120
+			tas.settings.debugging.offsetX = 160
 		end
 		
 		tas.settings.debugging.level = debug_number
@@ -1032,7 +1033,7 @@ function tas.commands(cmd, ...)
 		tas.prompt("/"..tas.registered_commands.record.." $$| ##/"..tas.registered_commands.playback.." $$- ##start $$| ##playback your record", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.save_warp.." $$| ##/"..tas.registered_commands.load_warp.." $$| ##/"..tas.registered_commands.delete_warp.." $$- ##save $$| ##load $$| ##delete a warp", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.resume.." $$| ##/"..tas.registered_commands.seek.." $$- ##resume $$| ##seek from a frame", 255, 100, 100)
-		tas.prompt(tas.settings.rewindingKey:upper().." $$- ##rewind during recording", 255, 100, 100)
+		tas.prompt(tas.settings.rewindingKey:upper().." $$- ##rewind during recording $$| ##L-SHIFT $$- ##x2 $$| ##L-ALT $$- ##x0.5", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.save_record.." $$| ##/"..tas.registered_commands.load_record.." $$- ##save $$| ##load a TAS file", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.autotas.." $$- ##toggle automatic record/playback", 255, 100, 100)
 		tas.prompt("/"..tas.registered_commands.clear_all.." $$- ##clear all cached data", 255, 100, 100)
@@ -1075,7 +1076,29 @@ function tas.render_record(deltaTime)
 			
 				tas.var.rewinding = true
 				
-				local frame_data = tas.data[total_frames-1]
+				-- // Offended by trashy logic? Please seek some drama elsewhere. (idk what i did but it works)
+				local frame_advance = 0
+				
+				if getKeyState("lshift") then
+					frame_advance = 2
+					
+				elseif getKeyState("lalt") then
+				
+					if tas.var.rewind_cache == nil or tas.var.rewind_cache == 0 then
+						tas.var.rewind_cache = total_frames
+					end
+				
+					if tas.var.rewind_cache % 1 == 0 then
+						frame_advance = 1
+					end
+					tas.var.rewind_cache = tas.var.rewind_cache - 0.25
+					
+				else
+					tas.var.rewind_cache = 0
+					frame_advance = 1
+				end
+				
+				local frame_data = tas.data[total_frames-frame_advance]
 				tas.var.record_tick = getTickCount() - frame_data.tick
 				
 				setElementPosition(vehicle, unpack(frame_data.p))
@@ -1104,8 +1127,10 @@ function tas.render_record(deltaTime)
 					end
 				end
 				
-				if total_frames > 2 then
-					tas.data[total_frames] = nil
+				if total_frames > 5 then
+					for i=total_frames-frame_advance+1, total_frames do
+						tas.data[i] = nil
+					end
 				end
 				return
 				
@@ -1117,6 +1142,8 @@ function tas.render_record(deltaTime)
 			
 				tas.var.rewinding = false
 				
+				tas.var.rewind_cache = 0
+				
 				if tas.timers.rewind_load then
 					if isTimer(tas.timers.rewind_load) then
 						killTimer(tas.timers.rewind_load)
@@ -1126,6 +1153,10 @@ function tas.render_record(deltaTime)
 				
 				if tas.settings.rewindingDelay > 50 then
 					tas.timers.rewind_load = setTimer(function() tas.timers.rewind_load = nil end, tas.settings.rewindingDelay, 1)
+				end
+				
+				if tas.settings.rewindingCameraReset then
+					setCameraTarget(localPlayer)
 				end
 				
 			end
@@ -1225,6 +1256,13 @@ addEventHandler("onClientPreRender", root, function()
 
 	if tas.settings.enableAnalog and tas.settings.useAnalogWrapper and not tas.var.playbacking then
 	
+		if isMTAWindowActive() or isCursorShowing() then 
+			setAnalogControlState("vehicle_right", 0, false)
+			setAnalogControlState("vehicle_left", 0, false)
+			tas.var.analog_direction = 0
+			return
+		end -- do not steer when cursor or any mta window is showing
+		
 		local lefts = getBoundKeys("vehicle_left")
 		local rights = getBoundKeys("vehicle_right")
 		local left_press = false
@@ -1246,16 +1284,16 @@ addEventHandler("onClientPreRender", root, function()
 			tas.var.analog_direction = 0
 		elseif left_press then
 			if tas.var.analog_direction > 0 then tas.var.analog_direction = 0 end
-			tas.var.analog_direction = math.max(-1, tas.var.analog_direction - tas.settings.analogSensitivity)
+			tas.var.analog_direction = math_max(-1, tas.var.analog_direction - tas.settings.analogSensitivity)
 		elseif right_press then
 			if tas.var.analog_direction < 0 then tas.var.analog_direction = 0 end
-			tas.var.analog_direction = math.min(1, tas.var.analog_direction + tas.settings.analogSensitivity)
+			tas.var.analog_direction = math_min(1, tas.var.analog_direction + tas.settings.analogSensitivity)
 		elseif tas.var.analog_direction ~= 0 and not (right_press or left_press) then
 			if tas.var.analog_direction == 0 then
 			elseif tas.var.analog_direction > 0 then
-				tas.var.analog_direction = math.max(0, tas.var.analog_direction - tas.settings.analogSensitivity * 1.333)
+				tas.var.analog_direction = math_max(0, tas.var.analog_direction - tas.settings.analogSensitivity * 1.333)
 			else
-				tas.var.analog_direction = math.min(0, tas.var.analog_direction + tas.settings.analogSensitivity * 1.333)
+				tas.var.analog_direction = math_min(0, tas.var.analog_direction + tas.settings.analogSensitivity * 1.333)
 			end
 		end
 		
@@ -1349,18 +1387,31 @@ function tas.render_playback()
 		local inbetweening = 0
 
 		if tas.settings.playbackInterpolation then
-			if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
-				while real_time > tas.data[tas.var.play_frame].tick do
-					tas.var.tick_1 = tas.data[tas.var.play_frame].tick
-					if tas.data[tas.var.play_frame+2] then
-						tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
-						tas.var.play_frame = tas.var.play_frame + 1
+		
+			-- adding 'adaptiveInterpolation', i had no idea how i coded this crap
+			-- this is me literally self-explaining this part in order to understand what to do
+			
+			if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then -- if play_frame is lower than tas.data //OR// tas.data[frame] exists
+			
+				while real_time > tas.data[tas.var.play_frame].tick do -- while tickCount is lower than tas.data[frame].tick
+				
+					tas.var.tick_1 = tas.data[tas.var.play_frame].tick -- start tick = that frame tick
+					
+					if tas.data[tas.var.play_frame+2] then -- if tas.data + 2 frames exists (HOW DOES THIS WORK)
+					
+						tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick -- next tick = that frame+1 tick
+						tas.var.play_frame = tas.var.play_frame + 1 -- increment that frame
+					
+					-- GOES BACK TO while, checks the newly incremented value and tries again
 					else
+					-- it has passed, real_time is actually lower than that frame tick
+					
 						if tas.settings.stopPlaybackFinish then
 							executeCommandHandler(tas.registered_commands.playback)
 							return
 						end
-						break
+						
+						break -- we got 'em folks
 					end
 				end
 			end
@@ -1535,12 +1586,13 @@ function tas.dxDebug()
 		tas.dxText("Recording: ".. (tas.var.recording == true and "#64FF64ENABLED" or "#FF6464DISABLED") .. " #FFFFFF" .. recording_extra, screenW/2-offsetX+170, screenH-200+18*0, 1)
 		tas.dxText("Playbacking: ".. (tas.var.playbacking == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*1, 1)
 		
-		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*3, 1)
-		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*4, 1)
+		tas.dxText("Auto-TAS: ".. (tas.settings.trigger_mapStart == true and "#64FF64ENABLED" or "#FF6464DISABLED"), screenW/2-offsetX+170, screenH-200+18*2, 1)
+		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*4, 1)
+		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*5, 1)
 		
 		local tick_var = nil
 		if tas.var.playbacking == true then tick_var = string_format("#%d", tas.data[tas.var.play_frame].tick) else tick_var = "N/A" end
-		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*5, 1)
+		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*6, 1)
 		
 		tas.pathWay()
 	end
@@ -1619,6 +1671,9 @@ function tas.pathWay()
 			end
 		end
 		
+	end
+	
+	if tas.settings.debugging.warpsRenderLevel <= tas.settings.debugging.level then
 		local tas_warps_total = #tas.warps
 		
 		if tas_warps_total >= 1 then
@@ -1634,7 +1689,6 @@ function tas.pathWay()
 				
 			end
 		end
-		
 	end
 	
 end
@@ -1730,6 +1784,7 @@ addDebugHook("preFunction", tas.changeFPSEvent, {"setFPSLimit"})
 
 -- // Overdrive 3 anti-sc
 function tas.killOnSc(_, _, _, _, _, vehicle)
+	if not tas.settings.replaceBlow then return end -- LMFAO RETARD FORGOR ABOUT THIS
 	if tas.var.recording then
 		if getVehicleController(vehicle) == localPlayer then
 			setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
@@ -1741,6 +1796,25 @@ function tas.killOnSc(_, _, _, _, _, vehicle)
 	end
 end
 addDebugHook("preFunction", tas.killOnSc, {"blowVehicle"})
+
+function tas.globalRequestData(handleType, ...)
+
+	local args = {...}
+
+	if handleType == "save" then
+	
+		if #tas.data == 0 then tas.prompt("Server saving failed, no data recorded.", 255, 100, 100) return end
+		triggerLatentServerEvent("tas:onGlobalRequest", localPlayer, "save", tas.data, tas.warps, args[1])
+		tas.prompt("Sending client data to server..", 255, 255, 100)
+		
+	end
+end
+addEvent("tas:onClientGlobalRequest", true)
+addEventHandler("tas:onClientGlobalRequest", root, tas.globalRequestData)
+
+addEventHandler("onClientRender", root, function()
+
+end)
 
 -- // Nitro detection and modify stats (playback and load warp)
 function tas.nos(vehicle, data)
