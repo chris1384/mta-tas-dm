@@ -1804,17 +1804,32 @@ function tas.globalRequestData(handleType, ...)
 	if handleType == "save" then
 	
 		if #tas.data == 0 then tas.prompt("Server saving failed, no data recorded.", 255, 100, 100) return end
-		triggerLatentServerEvent("tas:onGlobalRequest", localPlayer, "save", tas.data, tas.warps, args[1])
+		
+		triggerLatentServerEvent("tas:onGlobalRequest", 10^6, false, localPlayer, "save", tas.data, tas.warps, args[1])
 		tas.prompt("Sending client data to server..", 255, 255, 100)
+		
+	elseif handleType == "load" then
+	
+		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
+		local fileTarget = isPrivated .."saves/"..args[2]..".tas"
+		
+		if fileExists(fileTarget) then 
+			fileDelete(fileTarget)
+			tas.prompt("Warning! Existing file $$("..args[2]..".tas) ##has been deleted!", 255, 255, 100)
+		end
+		
+		local load_file = fileCreate(fileTarget)
+		if load_file then
+			fileWrite(load_file, args[1])
+			fileClose(load_file)
+		end
+		
+		tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record, 255, 255, 100)
 		
 	end
 end
 addEvent("tas:onClientGlobalRequest", true)
 addEventHandler("tas:onClientGlobalRequest", root, tas.globalRequestData)
-
-addEventHandler("onClientRender", root, function()
-
-end)
 
 -- // Nitro detection and modify stats (playback and load warp)
 function tas.nos(vehicle, data)
