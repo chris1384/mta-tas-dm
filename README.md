@@ -19,10 +19,9 @@ It is a complete remake over the old one. It might have a better overall perform
 - Frame-By-Frame recording, which locks your position and manually set next and previous frames
 - switching to regular and frame-by-frame recording anytime you want
 - continuing the run starting from the end and seeking the position based on a frame number
-- automatically starting recording or playbacking on map start
-- automatically saving any data that was left behind (on quit/resource stopping)
+- automatically starting recording or playbacking on map start (Auto-TAS)
 - debugging the run and showing a lot of info about what you're doing
-- saving and loading records
+- saving and loading records on client or serverside (suggested by *SKooD*)
 
 ## Tutorial
 ### 1. Downloading (for dummies)
@@ -36,7 +35,7 @@ It is a complete remake over the old one. It might have a better overall perform
 - Choose one of the versions of TAS to install ('new' is recommended)
 - Paste *tas* folder in the resources folder,
 - Open your server or type *refresh* in the server console if it's already running,
-- Type *start mta-tas-dm* in the server console,
+- Type *start tas* in the server console,
 - You should see an output about the resource that got started.
 
 - Done!
@@ -49,6 +48,7 @@ It is a complete remake over the old one. It might have a better overall perform
 
 ***- server.lua***
 - *server.lua* is used for events regarding model changes and race events (used in Auto-TAS).
+- Added file saving and downloading handlers between clients and the server.
 
 - That's it
 
@@ -71,6 +71,8 @@ It is a complete remake over the old one. It might have a better overall perform
 BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it up | +Left Alt to slow it down)
 /saver [name] - save the recorded data to a file
 /loadr [name] - load an existing run
+1.4* /saverg [name] - save the recorded data to a file on server
+1.4* /loadrg [name] - download a .TAS file from the server (use with /loadr upon finishing)
 /autotas - toggle Auto-TAS (trigger record or playback on map start)
 /clearall - clear all data
 /debugr [level] - toggle debugging
