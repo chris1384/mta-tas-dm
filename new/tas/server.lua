@@ -15,6 +15,7 @@ local tas = {
 		saveACLRequirement = {"Console", "Admin", "SuperModerator"}, -- the ACL Group requirements for a player to save TAS files serverside.
 		--saveACLOverwriteRequirement = {"Console", "Admin"}, -- [UNUSED] the ACL Group requirements for a player to overwrite previously saved TAS file serverside.
 		loadACLRequirement = {"Everyone"}, -- same as saving (must be logged in)
+		loadingCooldown = 5000, -- set a delay for players to load a certain file.
 		
 		saveWarpData = true, -- save warp data to TAS files
 		-- //
@@ -43,7 +44,7 @@ function tas.commands(player, cmd, ...)
 	
 		if tas.settings.enableGlobalAccess ~= true then tas.prompt("This command has been disabled!", player, 255, 100, 100) return end
 		
-		if tas.var.cooldowns[player] ~= nil then tas.prompt("Please wait for your record to be saved!", player, 255, 100, 100) return end
+		if tas.var.cooldowns[player] ~= nil then tas.prompt("Please wait for your record to be saved/loaded!", player, 255, 100, 100) return end
 		
 		if args[1] == nil then 
 			tas.prompt("Server saving failed, please specify a $$name ##for your file!", player, 255, 100, 100) 
@@ -73,7 +74,52 @@ function tas.commands(player, cmd, ...)
 		tas.var.cooldowns[player] = true
 		
 	elseif cmd == tas.registered_commands.load_record_global then
+	
 		if tas.settings.enableGlobalAccess ~= true then tas.prompt("This command has been disabled!", player, 255, 100, 100) return end
+		
+		if tas.var.cooldowns[player] ~= nil then tas.prompt("Please wait for your record to be saved/loaded!", player, 255, 100, 100) return end
+		
+		if args[1] == nil then 
+			tas.prompt("Server loading failed, please specify a $$name ##for your file!", player, 255, 100, 100) 
+			tas.prompt("Example: $$/"..tas.registered_commands.load_record_global.." ar2", player, 255, 100, 100) 
+			return 
+		end
+		
+		local permissionCheck = false
+		
+		local account = getPlayerAccount(player)
+		if (account and not isGuestAccount(account)) then
+			for index,aclGroup in ipairs(tas.settings.loadACLRequirement) do
+				if isObjectInACLGroup("user."..getAccountName(account), aclGetGroup(aclGroup)) then
+					permissionCheck = true
+					break
+				end
+			end
+		end
+		
+		if not permissionCheck then tas.prompt("You don't have access to use this command!", player, 255, 100, 100) return end
+		
+		local fileTarget = "saves/"..args[1]..".tas"
+		if not fileExists(fileTarget) then tas.prompt("Server loading failed, file does $$not ##exist!", player, 255, 100, 100) return end
+		
+		local load_file = fileOpen(fileTarget)
+		
+		if load_file then
+			local load_size = fileGetSize(load_file)
+			local load_data = fileRead(load_file, load_size)
+			
+			triggerLatentClientEvent(player, "tas:onClientGlobalRequest", 10^6, false, player, "load", load_data, args[1])
+			
+			tas.prompt("Server is sending file data to client, please wait!", player, 255, 255, 100)
+			
+			fileClose(load_file)
+			
+			tas.var.cooldowns[player] = true
+		else
+			tas.prompt("Error loading the file. (not exising/reading file not permitted)", player, 255, 255, 100)
+		end
+		
+		setTimer(function() tas.var.cooldowns[player] = nil end, tas.settings.loadingCooldown, 1)
 	end
 end
 
@@ -163,8 +209,6 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 	
 	end
 	-- //
-	
-	-- // Loading
 end)
 
 
