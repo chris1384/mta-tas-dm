@@ -17,6 +17,8 @@ local tas = {
 		loadACLRequirement = {"Everyone"}, -- same as saving (must be logged in)
 		loadingCooldown = 5000, -- set a delay for players to load a certain file.
 		
+		globalAnnouncements = true, -- enable server announcements whenever a player is saving/loading a file
+		
 		saveWarpData = true, -- save warp data to TAS files
 		-- //
 	},
@@ -39,6 +41,9 @@ addEventHandler("onResourceStart", resourceRoot, tas.init)
 function tas.commands(player, cmd, ...)
 
 	local args = {...}
+	
+	local r, g, b = getPlayerNametagColor(player)
+	local full_name = string.format("#%.2X%.2X%.2X", r, g, b) .. getPlayerName(player)
 
 	if cmd == tas.registered_commands.save_record_global then
 	
@@ -110,7 +115,11 @@ function tas.commands(player, cmd, ...)
 			
 			triggerLatentClientEvent(player, "tas:onClientGlobalRequest", 10^6, false, player, "load", load_data, args[1])
 			
-			tas.prompt("Server is sending file data to client, please wait!", player, 255, 255, 100)
+			if tas.settings.globalAnnouncements then
+				tas.prompt(full_name.." ##has requested file '$$"..args[1]..".tas##'! Sending file..", root, 255, 255, 100)
+			else
+				tas.prompt("Requested file '$$"..args[1]..".tas##' for downloading! Sending file..", player, 255, 255, 100)
+			end
 			
 			fileClose(load_file)
 			
@@ -203,7 +212,11 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 		
 		end
 		
-		tas.prompt(full_name.." ##has saved $$'saves/"..tas_fileName..".tas' ##to the server!", root, 255, 255, 100)
+		if tas.settings.globalAnnouncements then
+			tas.prompt(full_name.." ##has saved $$'saves/"..tas_fileName..".tas' ##to the server!", root, 255, 255, 100)
+		else
+			tas.prompt("$$'saves/"..tas_fileName..".tas' ##has been sent to the server successfully!", player, 255, 255, 100)
+		end
 		
 		tas.var.cooldowns[player] = nil
 	
