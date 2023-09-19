@@ -67,7 +67,7 @@ local tas = {
 		resumeDelay = 2000, -- time until the vehicle resumes from the resume command
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
-		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying. it's associated with 'keepWarpData'
+		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying.
 		saveWarpData = true, -- save warp data to .tas files
 		-- //
 		
@@ -84,7 +84,12 @@ local tas = {
 		rewindingDelay = 1500, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
 		rewindingCameraReset = false, -- reset the camera position after the rewind phase
 		
-		replaceBlow = true, -- prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3, can help up during recording
+		replaceBlow = true, 
+		--[[ 
+			prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3/Aphelium 3
+			it only worked during recording, now enabled during normal gameplay due to multiple requests.
+			doesn't work while playbacking.
+		]]
 		-- //
 		
 		
@@ -315,6 +320,12 @@ function tas.commands(cmd, ...)
 			
 			removeEventHandler("onClientPreRender", root, tas.render_record)
 			tas.var.recording = false
+			
+			tas.var.rewinding = false
+			if tas.timers.rewind_load then
+				killTimer(tas.timers.rewind_load)
+				tas.timers.rewind_load = nil
+			end
 			
 			tas.prompt("Recording stopped! ($$#"..tostring(#tas.data).." ##frames)", 100, 255, 100)
 		else
@@ -556,6 +567,12 @@ function tas.commands(cmd, ...)
 			end
 		end
 		
+		tas.var.rewinding = false
+		if tas.timers.rewind_load then
+			killTimer(tas.timers.rewind_load)
+			tas.timers.rewind_load = nil
+		end
+		
 		tas.timers.resume_load = setTimer(function()
 		
 			setElementFrozen(vehicle, false)
@@ -721,13 +738,14 @@ function tas.commands(cmd, ...)
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Loading record failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
-		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 	
 		if args[1] == nil then 
 			tas.prompt("Loading record failed, please specify the $$name ##of your file!", 255, 100, 100) 
 			tas.prompt("Example: $$/"..tas.registered_commands.load_record.." od3", 255, 100, 100) 
 			return 
 		end
+		
+		local fileTarget = isPrivated .."saves/"..args[1]..".tas" -- cool fix, unexpected mistake
 		
 		local file_additional = {}
 		local load_file = (fileExists(fileTarget) == true and fileOpen(fileTarget)) or false
@@ -944,6 +962,12 @@ function tas.commands(cmd, ...)
 		end
 		
 		tas.timers.warnClear = nil
+		
+		tas.var.rewinding = false
+		if tas.timers.rewind_load then
+			killTimer(tas.timers.rewind_load)
+			tas.timers.rewind_load = nil
+		end
 		
 		tas.data = {}
 		tas.warps = {}
@@ -1244,6 +1268,12 @@ function tas.render_record(deltaTime)
 	
 		removeEventHandler("onClientPreRender", root, tas.render_record)
 		tas.var.recording = false
+
+		tas.var.rewinding = false
+		if tas.timers.rewind_load then
+			killTimer(tas.timers.rewind_load)
+			tas.timers.rewind_load = nil
+		end
 		
 		tas.prompt("Recording stopped due to an error! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
 					
@@ -1784,16 +1814,24 @@ addDebugHook("preFunction", tas.changeFPSEvent, {"setFPSLimit"})
 
 -- // Overdrive 3 anti-sc
 function tas.killOnSc(_, _, _, _, _, vehicle)
-	if not tas.settings.replaceBlow then return end -- LMFAO RETARD FORGOR ABOUT THIS
-	if tas.var.recording then
-		if getVehicleController(vehicle) == localPlayer then
-			setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
-			setElementVelocity(vehicle, 0, 0, 0)
-			setElementRotation(vehicle, 180, 0, 90) 
-			
+	
+	-- wanna bother the driver? not possible anymore. this could've caused the driver to blow up, even with the cvar enabled
+	if getPedOccupiedVehicle(localPlayer) == vehicle then
+		if getVehicleController(vehicle) ~= localPlayer then
 			return "skip"
 		end
 	end
+	
+	if not tas.settings.replaceBlow then return end -- LMFAO RETARD FORGOR ABOUT THIS
+	if tas.var.playbacking then return end -- edit
+	
+	if getVehicleController(vehicle) == localPlayer then -- why would you tp the vehicle from passagers pov?
+		setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
+		setElementVelocity(vehicle, 0, 0, 0)
+		setElementRotation(vehicle, 180, 0, 90) 
+	end
+	
+	return "skip" -- tested under freeroam environment, doesn't work for passagers unless i force it!
 end
 addDebugHook("preFunction", tas.killOnSc, {"blowVehicle"})
 
@@ -1824,7 +1862,7 @@ function tas.globalRequestData(handleType, ...)
 			fileClose(load_file)
 		end
 		
-		tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record, 255, 255, 100)
+		tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record.." "..args[2].." ##!", 255, 255, 100)
 		
 	end
 end
