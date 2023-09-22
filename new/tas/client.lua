@@ -84,6 +84,7 @@ local tas = {
 		rewindingDelay = 1500, -- time in miliseconds until the vehicle resumes from rewinding; 0 - instant
 		rewindingCameraReset = false, -- reset the camera position after the rewind phase
 		
+		antiExplode = true, -- set the vehicle health to bare minimum during rewinding/loading to prevent it from exploding. this should be used cautiously, since playbacking might return an error mid-run
 		replaceBlow = true, 
 		--[[ 
 			prevent from blowing up the vehicle when an anti-sc is triggered, instead use the teleport method used in Overdrive 3/Aphelium 3
@@ -455,7 +456,7 @@ function tas.commands(cmd, ...)
 		setElementPosition(vehicle, unpack(w_data.p))
 		setElementRotation(vehicle, unpack(w_data.r))
 		
-		setElementHealth(vehicle, w_data.h)
+		setElementHealth(vehicle, (tas.settings.antiExplode == true and math_max(w_data.h, 251)) or w_data.h)
 		
 		setElementFrozen(vehicle, true)
 		
@@ -556,7 +557,7 @@ function tas.commands(cmd, ...)
 		setElementPosition(vehicle, unpack(resume_data.p))
 		setElementRotation(vehicle, unpack(resume_data.r))
 		
-		setElementHealth(vehicle, resume_data.h)
+		setElementHealth(vehicle, (tas.settings.antiExplode == true and math_max(resume_data.h, 251)) or resume_data.h)
 		
 		setElementFrozen(vehicle, true)
 		
@@ -1138,7 +1139,7 @@ function tas.render_record(deltaTime)
 				end
 				
 				if tas.settings.useHealthStates then
-					setElementHealth(vehicle, frame_data.h)
+					setElementHealth(vehicle, (tas.settings.antiExplode == true and math_max(frame_data.h, 251)) or frame_data.h)
 				end
 				
 				if tas.settings.useNitroStates then
@@ -1201,7 +1202,7 @@ function tas.render_record(deltaTime)
 						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
 					end
 				end
-				setElementHealth(vehicle, frame_data.h)
+				setElementHealth(vehicle, (tas.settings.antiExplode == true and math_max(frame_data.h, 251)) or frame_data.h)
 				
 				if tas.settings.useNitroStates then
 					tas.nos(vehicle, frame_data.n)
