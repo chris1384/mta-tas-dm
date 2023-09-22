@@ -39,6 +39,14 @@ local tas = {
 		startPrompt = true, -- show resource initialization text on startup
 		promptType = 1, -- how action messages should be rendered. 0: none, 1: chatbox (default), 2: dxText (useful if server uses wrappers), 3: iprint (clientscript log)
 		
+		enableUserConfig = true, 
+		--[[
+			save every cvar modified in a separate file, then use it to load your next session of using TAS.
+			this setting works no matter what its value is, it depends on the users config file and if they used /tascvar
+			it is associated with 'usePrivateFolder', meaning that configs can either load from global cache or private cache.
+			added it from a couple of requests
+		]]
+		
 		trigger_mapStart = false, -- [AUTO-TAS cvar] start recording on map start. if there's data found, switch to automatic playback instead
 		stopPlaybackFinish = true, -- prevent freezing the position on last frame while playbacking
 		
@@ -260,11 +268,6 @@ local string_format = string.format
 
 -- // Initialization
 function tas.init()
-
-	if tas.settings.startPrompt then
-		tas.prompt("Recording Tool $$v1.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
-		tas.prompt("Type $$/tashelp ##for commands!", 255, 100, 100)
-	end
 	
 	for _,v in pairs(tas.registered_commands) do
 		addCommandHandler(v, tas.commands)
@@ -273,6 +276,38 @@ function tas.init()
 	addEventHandler("onClientRender", root, tas.dxDebug, true, "low-1384")
 	
 	tas.textures.triangle = svgCreate(40, 80, [[<svg height="40" width="40"><polygon points="0,20 40,0 40,40" style="fill:white"/></svg>]])
+	
+	local config_loaded = false
+	
+	-- // User config load, if you want to disable it entirely, delete this part >>
+	if fileExists("@config.json") then
+		local config_file = fileOpen("@config.json")
+		if config_file then
+		
+			local size = fileGetSize(config_file)
+			local data = fileRead(config_file, size)
+			local data2table = fromJSON(data)
+			
+			if data2table.enableUserConfig == true then
+				for key,value in pairs(data2table) do
+					tas.settings[key] = value
+					config_loaded = true
+				end
+			end
+		
+			fileClose(config_file)
+		end
+	end
+	-- // << Until here 
+	
+	if tas.settings.startPrompt then
+		tas.prompt("Recording Tool $$v1.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
+		tas.prompt("Type $$/tashelp ##for commands!", 255, 100, 100)
+		
+		if config_loaded then
+			tas.prompt("User settings have been loaded!", 255, 100, 255)
+		end
+	end
 	
 end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
@@ -1041,6 +1076,14 @@ function tas.commands(cmd, ...)
 				if value ~= nil then
 					tas.settings[key] = value
 					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
+					
+					if fileExists("@config.json") then fileDelete("@config.json") end
+					local save_cvar_file = fileCreate("@config.json")
+					if save_cvar_file then
+						fileWrite(save_cvar_file, toJSON(tas.settings))
+						fileClose(save_cvar_file)
+					end
+					
 				else
 					tas.prompt("Setting cvar failed, invalid key $$value##!", 255, 100, 100)
 					return
