@@ -1300,7 +1300,7 @@ function tas.render_record(deltaTime)
 			r = r,
 			v = v,
 			rv = rv,
-			h = health,
+			h = math_max(1, health),
 			m = model,
 			n = nos,
 			k = keys,
