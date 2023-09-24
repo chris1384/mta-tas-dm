@@ -731,7 +731,7 @@ function tas.commands(cmd, ...)
 					keys = table_concat(run.k, ",")
 				end
 				
-				fileWrite(save_file, string_format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, keys).."\n")
+				fileWrite(save_file, string_format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math_max(1, run.h), run.m, nos, keys).."\n")
 			end
 			
 			fileWrite(save_file, "-run\n")
@@ -751,7 +751,7 @@ function tas.commands(cmd, ...)
 					end
 					
 					if warp.tick then
-						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), math_max(1, run.h), warp.m, nos).."\n")
 					end
 					
 				end
@@ -838,7 +838,7 @@ function tas.commands(cmd, ...)
 									keys = split(att[9], ",")
 								end
 								
-								table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = tonumber(att[6]), m = tonumber(att[7]), n = n, k = keys})
+								table.insert(tas.data, {tick = tonumber(att[1]), p = p, r = r, v = v, rv = rv, h = math_max(1, tonumber(att[6])), m = tonumber(att[7]), n = n, k = keys})
 							
 							else
 							
@@ -899,7 +899,7 @@ function tas.commands(cmd, ...)
 									n = nil
 								end
 								
-								table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = tonumber(att[7]), m = tonumber(att[8]), n = n})
+								table.insert(tas.warps, {frame = tonumber(att[1]), tick = tonumber(att[2]), p = p, r = r, v = v, rv = rv, h = math_max(1, tonumber(att[7])), m = tonumber(att[8]), n = n})
 								
 							else
 							
