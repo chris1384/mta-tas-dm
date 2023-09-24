@@ -180,7 +180,7 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 					keys = table.concat(run.k, ",")
 				end
 				
-				fileWrite(save_file, string.format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), run.h, run.m, nos, keys).."\n")
+				fileWrite(save_file, string.format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math.max(run.h), run.m, nos, keys).."\n")
 			end
 			
 			fileWrite(save_file, "-run\n")
