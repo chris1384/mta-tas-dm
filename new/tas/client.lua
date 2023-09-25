@@ -1300,7 +1300,7 @@ function tas.render_record(deltaTime)
 			r = r,
 			v = v,
 			rv = rv,
-			h = math_max(1, health),
+			h = health,
 			m = model,
 			n = nos,
 			k = keys,
@@ -1664,9 +1664,12 @@ function tas.dxDebug()
 		tas.dxText("Recorded FPS: #FF6464"..tostring(tas.var.fps), screenW/2-offsetX+170, screenH-200+18*4, 1)
 		tas.dxText("Total Frames: #FFAAFF#".. tostring(#tas.data) .." #FFFFFF| Total Warps: #00FFFF#".. tostring(#tas.warps), screenW/2-offsetX+170, screenH-200+18*5, 1)
 		
-		local tick_var = nil
-		if tas.var.playbacking == true then tick_var = string_format("#%d", tas.data[tas.var.play_frame].tick) else tick_var = "N/A" end
-		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Playback Tick: #6464FF".. tick_var, screenW/2-offsetX+170, screenH-200+18*6, 1)
+		local playback_runtime = "N/A"
+		if tas.data[tas.var.play_frame] then
+			playback_runtime = string_format("%02d:%02d.%03d", (tas.data[tas.var.play_frame].tick/60000)%60, (tas.data[tas.var.play_frame].tick/1000)%60, (tas.data[tas.var.play_frame].tick)%1000)
+		end
+		
+		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Time: #6464FF".. tostring(playback_runtime), screenW/2-offsetX+170, screenH-200+18*6, 1)
 		
 		tas.pathWay()
 	end
