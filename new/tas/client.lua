@@ -1138,7 +1138,7 @@ function tas.render_record(deltaTime)
 		local total_frames = #tas.data
 		
 		-- // I don't like this part, at all
-		if getKeyState(tas.settings.rewindingKey) then
+		if getKeyState(tas.settings.rewindingKey) and not (isMTAWindowActive() or isCursorShowing()) then
 		
 			if not (tas.timers.load_warp or tas.timers.resume_load) then
 			
@@ -1300,7 +1300,7 @@ function tas.render_record(deltaTime)
 			r = r,
 			v = v,
 			rv = rv,
-			h = health,
+			h = math_max(1, health),
 			m = model,
 			n = nos,
 			k = keys,
