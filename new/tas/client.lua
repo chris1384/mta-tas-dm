@@ -751,7 +751,7 @@ function tas.commands(cmd, ...)
 					end
 					
 					if warp.tick then
-						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), math_max(1, run.h), warp.m, nos).."\n")
+						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), math_max(1, warp.h), warp.m, nos).."\n")
 					end
 					
 				end
@@ -1551,7 +1551,10 @@ function tas.render_playback()
 				end
 				
 			end
-			setElementHealth(vehicle, frame_data.h)
+			
+			if tas.settings.useHealthStates then
+				setElementHealth(vehicle, frame_data.h)
+			end
 			
 		end
 		
