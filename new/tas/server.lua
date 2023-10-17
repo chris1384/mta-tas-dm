@@ -6,6 +6,7 @@
 local tas = {
 	var = {
 		cooldowns = {},
+		handles = {},
 	},
 	settings = {
 	
@@ -15,7 +16,6 @@ local tas = {
 		saveACLRequirement = {"Console", "Admin", "SuperModerator"}, -- the ACL Group requirements for a player to save TAS files serverside.
 		--saveACLOverwriteRequirement = {"Console", "Admin"}, -- [UNUSED] the ACL Group requirements for a player to overwrite previously saved TAS file serverside.
 		loadACLRequirement = {"Everyone"}, -- same as saving (must be logged in)
-		loadingCooldown = 5000, -- set a delay for players to load a certain file.
 		
 		globalAnnouncements = true, -- enable server announcements whenever a player is saving/loading a file
 		
@@ -28,6 +28,7 @@ local tas = {
 tas.registered_commands = {	
 	load_record_global = "loadrg",
 	save_record_global = "saverg",
+	force_cancel = "forcecancel",
 }
 
 -- // Initialization
@@ -49,7 +50,7 @@ function tas.commands(player, cmd, ...)
 	
 		if tas.settings.enableGlobalAccess ~= true then tas.prompt("This command has been disabled!", player, 255, 100, 100) return end
 		
-		if tas.var.cooldowns[player] ~= nil then tas.prompt("Please wait for your record to be saved/loaded!", player, 255, 100, 100) return end
+		if tas.var.cooldowns[player] ~= nil then tas.prompt("Please wait for your record to be $$saved##/$$loaded##!", player, 255, 100, 100) return end
 		
 		if args[1] == nil then 
 			tas.prompt("Server saving failed, please specify a $$name ##for your file!", player, 255, 100, 100) 
@@ -113,7 +114,12 @@ function tas.commands(player, cmd, ...)
 			local load_size = fileGetSize(load_file)
 			local load_data = fileRead(load_file, load_size)
 			
-			triggerLatentClientEvent(player, "tas:onClientGlobalRequest", 10^6, false, player, "load", load_data, args[1])
+			local handleLoad = triggerLatentClientEvent(player, "tas:onClientGlobalRequest", 10^6, false, player, "load", load_data, args[1])
+			
+			if handleLoad then
+				local handles = getLatentEventHandles()
+				tas.var.handles[player] = handles[#handles]
+			end
 			
 			if tas.settings.globalAnnouncements then
 				tas.prompt(full_name.." ##has requested file '$$"..args[1]..".tas##'! Sending file..", root, 255, 255, 100)
@@ -127,8 +133,14 @@ function tas.commands(player, cmd, ...)
 		else
 			tas.prompt("Error loading the file. (not exising/reading file not permitted)", player, 255, 255, 100)
 		end
-		
-		setTimer(function() tas.var.cooldowns[player] = nil end, tas.settings.loadingCooldown, 1)
+	
+	elseif cmd == tas.registered_commands.force_cancel then
+	
+		if tas.var.handles[player] then
+			cancelLatentEvent(tas.var.handles[player])
+		end
+		tas.var.cooldowns[player] = nil
+		triggerClientEvent(player, "tas:onClientGlobalRequest", player, "forcecancel")
 	end
 end
 
@@ -147,79 +159,91 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 		local tas_data = global_data[1]
 		local tas_warps = global_data[2]
 		local tas_fileName = global_data[3]
+		
+		if #tas_data > 0 then
 	
-		local fileTarget = "saves/"..tas_fileName..".tas"
-		
-		-- using fileExists shouldn't be used anymore as it's already handled in the command part
-		-- under weird circumstances, errors can still happen and wreck everything up. for safety, this check is also done here
-		if fileExists(fileTarget) then tas.prompt("Server saving error, file with the same name $$already ##exists!", player, 255, 100, 100) return end
-		
-		local save_file = fileCreate(fileTarget)
-		if save_file then
-		
-			-- // Header
-			fileWrite(save_file, "# "..tas_fileName..".tas file created on "..os.date().."\n")
-			fileWrite(save_file, "# Author: "..string.gsub(full_name, "#%x%x%x%x%x%x", "").." | Frames: "..tostring(#tas_data).." | Warps: "..tostring(#tas_warps).."\n\n")
-			-- //
+			local fileTarget = "saves/"..tas_fileName..".tas"
 			
-			-- // Recording part
-			fileWrite(save_file, "+run\n")
+			-- using fileExists shouldn't be used anymore as it's already handled in the command part
+			-- under weird circumstances, errors can still happen and wreck everything up. for safety, this check is also done here
+			if fileExists(fileTarget) then tas.prompt("Server saving error, file with the same name $$already ##exists!", player, 255, 100, 100) return end
 			
-			for i=1, #tas_data do
+			local save_file = fileCreate(fileTarget)
+			if save_file then
 			
-				local run = tas_data[i]
-				local nos = "-1"
+				-- // Header
+				fileWrite(save_file, "# "..tas_fileName..".tas file created on "..os.date().."\n")
+				fileWrite(save_file, "# Author: "..string.gsub(full_name, "#%x%x%x%x%x%x", "").." | Frames: "..tostring(#tas_data).." | Warps: "..tostring(#tas_warps).."\n\n")
+				-- //
 				
-				if run.n then
-					local active = ((run.n.a == true) and "1") or "0"
-					nos = tostring(run.n.c)..","..tostring(tas.float(run.n.l))..",".. active
-				end
+				-- // Recording part
+				fileWrite(save_file, "+run\n")
 				
-				local keys = ""
-				if run.k then
-					keys = table.concat(run.k, ",")
-				end
+				for i=1, #tas_data do
 				
-				fileWrite(save_file, string.format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math.max(run.h), run.m, nos, keys).."\n")
-			end
-			
-			fileWrite(save_file, "-run\n")
-			-- //
-			
-			-- // Warps part
-			if #tas_warps > 0 and tas.settings.saveWarpData then
-				fileWrite(save_file, "+warps\n")
-				for i=1, #tas_warps do
-				
-					local warp = tas_warps[i]
+					local run = tas_data[i]
 					local nos = "-1"
 					
-					if warp.n then
-						local active = ((warp.n.a == true) and "1") or "0"
-						nos = tostring(warp.n.c)..","..tostring(tas.float(warp.n.l))..",".. active
+					if run.n then
+						local active = ((run.n.a == true) and "1") or "0"
+						nos = tostring(run.n.c)..","..tostring(tas.float(run.n.l))..",".. active
 					end
 					
-					if warp.tick then
-						fileWrite(save_file, string.format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+					local keys = ""
+					if run.k then
+						keys = table.concat(run.k, ",")
 					end
 					
+					fileWrite(save_file, string.format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math.max(run.h), run.m, nos, keys).."\n")
 				end
-				fileWrite(save_file, "-warps")
-			end
-			-- //
+				
+				fileWrite(save_file, "-run\n")
+				-- //
+				
+				-- // Warps part
+				if #tas_warps > 0 and tas.settings.saveWarpData then
+					fileWrite(save_file, "+warps\n")
+					for i=1, #tas_warps do
+					
+						local warp = tas_warps[i]
+						local nos = "-1"
+						
+						if warp.n then
+							local active = ((warp.n.a == true) and "1") or "0"
+							nos = tostring(warp.n.c)..","..tostring(tas.float(warp.n.l))..",".. active
+						end
+						
+						if warp.tick then
+							fileWrite(save_file, string.format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), warp.h, warp.m, nos).."\n")
+						end
+						
+					end
+					fileWrite(save_file, "-warps")
+				end
+				-- //
+				
+				fileClose(save_file)
 			
-			fileClose(save_file)
-		
-		end
-		
-		if tas.settings.globalAnnouncements then
-			tas.prompt(full_name.." ##has saved $$'saves/"..tas_fileName..".tas' ##to the server!", root, 255, 255, 100)
+			end
+			
+			if tas.settings.globalAnnouncements then
+				tas.prompt(full_name.." ##has saved $$'saves/"..tas_fileName..".tas' ##to the server!", root, 255, 255, 100)
+			else
+				tas.prompt("$$'saves/"..tas_fileName..".tas' ##has been sent to the server successfully!", player, 255, 255, 100)
+			end
+			
 		else
-			tas.prompt("$$'saves/"..tas_fileName..".tas' ##has been sent to the server successfully!", player, 255, 255, 100)
+			tas.prompt("Server saving error, no $$data ##found!", player, 255, 100, 100)
 		end
 		
 		tas.var.cooldowns[player] = nil
 	
+	elseif handleType == "success_load" then
+		tas.var.handles[player] = nil
+		tas.var.cooldowns[player] = nil
+	
+	elseif handleType == "failed_save" then
+		tas.var.cooldowns[player] = nil
 	end
 	-- //
 end)
@@ -248,6 +272,7 @@ end)
 addEventHandler("onPlayerQuit", root, function()
 	local player = source
 	tas.var.cooldowns[player] = nil
+	tas.var.handles[player] = nil
 end)
 
 -- // Command messages
