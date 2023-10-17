@@ -1905,7 +1905,7 @@ function tas.globalRequestData(handleType, ...)
 		end
 		
 		-- // this shouldn't fail, IT SHOULDN'T!
-		local handleSent = triggerLatentServerEvent("tas:onGlobalRequest", 10^2, false, localPlayer, "save", tas.data, tas.warps, args[1])
+		local handleSent = triggerLatentServerEvent("tas:onGlobalRequest", 10^6, false, localPlayer, "save", tas.data, tas.warps, args[1])
 		
 		if handleSent then
 		
