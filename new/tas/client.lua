@@ -22,6 +22,9 @@ local tas = {
 		
 		playbacking = false, -- magic happening
 		
+		saving_handle = nil, -- server-save handle number
+		saving_percent = 0, -- server-save percentage
+		
 		analog_direction = 0, -- analog wrapper value
 		
 		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
@@ -331,6 +334,7 @@ function tas.commands(cmd, ...)
 		if not vehicle then tas.prompt("Recording failed, get a $$vehicle ##first!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Recording failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Recording failed, please wait for the resume trigger!", 255, 100, 100) return end
+		if tas.timers.saving_timer then tas.prompt("Recording failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
@@ -771,6 +775,7 @@ function tas.commands(cmd, ...)
 		if tas.var.playbacking then tas.prompt("Loading record failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Loading record failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Loading record failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		if tas.timers.saving_timer then tas.prompt("Loading record failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Loading record failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
@@ -986,6 +991,7 @@ function tas.commands(cmd, ...)
 		if tas.var.playbacking then tas.prompt("Clearing all data failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.load_warp then tas.prompt("Clearing all data failed, wait for the $$warp ##to $$load##!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Clearing all data failed, wait for the $$resume ##process to finish!", 255, 100, 100) return end
+		if tas.timers.saving_timer then tas.prompt("Clearing all data failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Clearing all data failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		if #tas.data == 0 and #tas.warps == 0 then tas.prompt("Nothing to clear.", 255, 100, 100) return end
 		
@@ -1876,8 +1882,9 @@ function tas.killOnSc(_, _, _, _, _, vehicle)
 	if tas.var.playbacking then return end -- edit
 	
 	if getVehicleController(vehicle) == localPlayer then -- why would you tp the vehicle from passagers pov?
-		setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
 		setElementVelocity(vehicle, 0, 0, 0)
+		setElementPosition(vehicle, 2940.2746, -2051.7504, 3.1619)
+		setElementAngularVelocity(vehicle, 0, 0, 0) 
 		setElementRotation(vehicle, 180, 0, 90) 
 	end
 	
@@ -1891,10 +1898,49 @@ function tas.globalRequestData(handleType, ...)
 
 	if handleType == "save" then
 	
-		if #tas.data == 0 then tas.prompt("Server saving failed, no data recorded.", 255, 100, 100) return end
+		if #tas.data == 0 then 
+			tas.prompt("Server saving failed, no $$data ##recorded.", 255, 100, 100) 
+			triggerServerEvent("tas:onGlobalRequest", localPlayer, "failed_save")
+			return 
+		end
 		
-		triggerLatentServerEvent("tas:onGlobalRequest", 10^6, false, localPlayer, "save", tas.data, tas.warps, args[1])
-		tas.prompt("Sending client data to server..", 255, 255, 100)
+		-- // this shouldn't fail, IT SHOULDN'T!
+		local handleSent = triggerLatentServerEvent("tas:onGlobalRequest", 10^2, false, localPlayer, "save", tas.data, tas.warps, args[1])
+		
+		if handleSent then
+		
+			-- // neither should this
+			local handles = getLatentEventHandles()
+			tas.var.saving_handle = handles[#handles]
+			tas.var.saving_percent = getLatentEventStatus(tas.var.saving_handle).percentComplete
+			
+			tas.timers.saving_timer = setTimer(function()
+			
+				-- // but this one can, which is why we're performing some checks
+				local current_handle = getLatentEventStatus(tas.var.saving_handle)
+				if current_handle then 
+					tas.var.saving_percent = current_handle.percentComplete
+				end
+				
+				-- // if handle retrieval failed or it reached 100%, then remove restrictions
+				if not current_handle or tas.var.saving_percent >= 100 then
+					if tas.timers.saving_timer then
+						if isTimer(tas.timers.saving_timer) then
+							killTimer(tas.timers.saving_timer)
+						end
+						tas.timers.saving_timer = nil
+						tas.var.saving_handle = nil
+						tas.var.saving_percent = 0
+					end
+				end
+				
+			end, 200, 0)
+			
+			tas.prompt("Sending client data to server..", 255, 255, 100)
+		
+		else
+			tas.prompt("Server saving failed, handle init. failed for an $$unknown ##reason.", 255, 100, 100)
+		end
 		
 	elseif handleType == "load" then
 	
@@ -1913,6 +1959,26 @@ function tas.globalRequestData(handleType, ...)
 		end
 		
 		tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record.." "..args[2].." ##!", 255, 255, 100)
+		
+		triggerServerEvent("tas:onGlobalRequest", localPlayer, "success_load")
+		
+	elseif handleType == "forcecancel" then
+	
+		if tas.var.saving_handle then
+			cancelLatentEvent(tas.var.saving_handle)
+			tas.var.saving_handle = nil
+			tas.var.saving_percent = 0
+		end
+		
+		if tas.timers.saving_timer then
+			if isTimer(tas.timers.saving_timer) then
+				killTimer(tas.timers.saving_timer)
+			end
+			tas.timers.saving_timer = nil
+		end
+		
+		-- // baritone message
+		tas.prompt("ok canceled", 255, 100, 255)
 		
 	end
 end
