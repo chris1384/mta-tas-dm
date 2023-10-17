@@ -75,6 +75,7 @@ BACKSPACE - hold it to rewind the run while recording (+Left Shift to speed it u
 1.4* /loadrg [name] - download a .TAS file from the server (use with /loadr upon finishing)
 /autotas - toggle Auto-TAS (trigger record or playback on map start)
 /clearall - clear all data
+1.4* /forcecancel - stops any data from being sent or gathered from the server
 /debugr [level] - toggle debugging
 1.4* /tascvar [key] [value] - change settings in-game (use '/tascvar show' to see all commands)
 ```
