@@ -117,7 +117,7 @@ function tas.commands(player, cmd, ...)
 			local handleLoad = triggerLatentClientEvent(player, "tas:onClientGlobalRequest", 10^6, false, player, "load", load_data, args[1])
 			
 			if handleLoad then
-				local handles = getLatentEventHandles()
+				local handles = getLatentEventHandles(player)
 				tas.var.handles[player] = handles[#handles]
 			end
 			
