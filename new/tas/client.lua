@@ -88,7 +88,7 @@ local tas = {
 		--[[ 
 			CURRENT BUGS: the function can get triggered a lot more when using higher fps, even if is not a lagspike.
 			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
-			DO NOT RECORD WITH FPS HIGHER THAN 75, IT CAN CAUSE MASSIVE BUGS!!!
+			FIXED FRAME TICK RECALCULATION. IT SHOULD RECORD PERFECTLY!!!
 		]]
 		
 		rewindingKey = "backspace", -- registered key for rewinding
@@ -1270,6 +1270,7 @@ function tas.render_record(deltaTime)
 			
 			local half = 0.5
 			local fps_to_ms = math_ceil(1000 / tas.var.fps)
+			local fps_magnitude = tas.var.fps / 50
 			
 			if deltaTime >= fps_to_ms * 1.5 then
 
@@ -1279,7 +1280,7 @@ function tas.render_record(deltaTime)
 
 				if segment_distance < 300 then
 				
-					local vx, vy, vz = unpack(previous_frame.v)
+					local vx, vy, vz = v[1]/fps_magnitude, v[2]/fps_magnitude, v[3]/fps_magnitude
 					local kmh = tas.dist3D(0, 0, 0, vx, vy, vz)
 					
 					if kmh > 0 then
