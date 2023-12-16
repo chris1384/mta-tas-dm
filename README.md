@@ -22,6 +22,7 @@ It is a complete remake over the old one. It might have a better overall perform
 - automatically starting recording or playbacking on map start (Auto-TAS)
 - debugging the run and showing a lot of info about what you're doing
 - saving and loading records on client or serverside (suggested by *SKooD*)
+- slowmotion recording for more precise inputs (1.4*)
 
 ## Tutorial
 ### 1. Downloading (for dummies)
