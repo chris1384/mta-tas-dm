@@ -27,7 +27,9 @@ local tas = {
 		
 		analog_direction = 0, -- analog wrapper value
 		
-		fps = getFPSLimit() -- current fps of the user, can change during recording or when you're starting a new one
+		fps = getFPSLimit(), -- current fps of the user, can change during recording or when you're starting a new one
+		gamespeed = getGameSpeed(), -- used for slowmotion recording
+		gamespeed_event = false, -- used for slowmotion recording
 	},
 			
 	data = {}, -- run data
@@ -84,11 +86,13 @@ local tas = {
 		
 		
 		-- // Record Settings
-		precautiousRecording = true, 
-		--[[ 
-			CURRENT BUGS: the function can get triggered a lot more when using higher fps, even if is not a lagspike.
-			uses the newly introduced function that optimizes the run on the go. it checks for lagspikes every frame and recorrects the ticks from the previous 2 frames so it can be played back smoothly.
-			FIXED FRAME TICK RECALCULATION. IT SHOULD RECORD PERFECTLY!!!
+		useGameSpeed = false, 
+		--[[
+			recalculate the ticks based on players gamespeed (slowmotion/speedup).
+			this can be useful for achieving near perfect runs on precision based map parts (EoS e.g.) using slowmotion then playback as it was played normally
+			maps often have gamespeed scripts integrated into them for decoration showcase, please use /tascvar to tweak it from time to time
+			should be used with care, as players can get an unfair benefit (playbacking) on parts designed to be played in slowmotion.
+			NB: slowmotion can affect angular velocity due to GTA:SA's air resistance implementation, which is not FPS friendly
 		]]
 		
 		rewindingKey = "backspace", -- registered key for rewinding
@@ -209,6 +213,7 @@ local localPlayer = getLocalPlayer()
 local root = getRootElement()
 
 local getTickCount = getTickCount
+local getGameSpeed = getGameSpeed
 
 local getPedOccupiedVehicle = getPedOccupiedVehicle
 local getVehicleController = getVehicleController
@@ -236,6 +241,8 @@ local setElementModel = setElementModel
 local getKeyState = getKeyState
 local getPedControlState = getPedControlState
 local setPedControlState = setPedControlState
+local getAnalogControlState = getAnalogControlState
+local setAnalogControlState = setAnalogControlState
 
 local dxDrawText = dxDrawText
 local dxDrawLine3D = dxDrawLine3D
@@ -268,6 +275,7 @@ local string_gsub = string.gsub
 local string_format = string.format
 
 -- // Local Functions End
+
 
 -- // Initialization
 function tas.init()
@@ -532,8 +540,7 @@ function tas.commands(cmd, ...)
 			tas.nos(vehicle, w_data.n)
 			
 			if tas.var.recording then
-				tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms
-				tas.data[#tas.data].fixed = nil
+				tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms * tas.var.gamespeed
 				tas.var.record_tick = getTickCount() - w_data.tick
 				addEventHandler("onClientPreRender", root, tas.render_record)
 			end
@@ -627,7 +634,7 @@ function tas.commands(cmd, ...)
 			addEventHandler("onClientPreRender", root, tas.render_record)
 			tas.var.recording = true
 			
-			tas.var.record_tick = getTickCount() - resume_data.tick
+			tas.var.record_tick = getTickCount() - resume_data.tick 
 			
 			tas.timers.resume_load = nil
 									
@@ -1013,6 +1020,7 @@ function tas.commands(cmd, ...)
 		
 		tas.data = {}
 		tas.warps = {}
+		tas.var.prompts = {}
 		
 		tas.prompt("Cleared all data.", 255, 100, 255)
 		
@@ -1122,7 +1130,7 @@ function tas.render_record(deltaTime)
 	local vehicle = tas.cveh(localPlayer)
 	
 	if vehicle then
-	
+
 		local model = getElementModel(vehicle)
 		
 		if tas.settings.hunterFinish then
@@ -1140,7 +1148,7 @@ function tas.render_record(deltaTime)
 				return
 			end
 		end
-	
+		
 		local total_frames = #tas.data
 		
 		-- // I don't like this part, at all
@@ -1173,7 +1181,6 @@ function tas.render_record(deltaTime)
 				end
 				
 				local frame_data = tas.data[total_frames-frame_advance]
-				tas.var.record_tick = getTickCount() - frame_data.tick
 				
 				setElementPosition(vehicle, unpack(frame_data.p))
 				setElementRotation(vehicle, unpack(frame_data.r))
@@ -1263,44 +1270,48 @@ function tas.render_record(deltaTime)
 		end
 	
 		local tick, p, r, v, rv, health, model, nos, keys, ground, analog = tas.record_state(vehicle)
+		local marked = nil
+		
+		local gamespeed = (tas.settings.useGameSpeed == true and getGameSpeed()) or 1
+		if tas.var.gamespeed ~= gamespeed then
+			tas.var.gamespeed_event = true
+			tas.var.gamespeed = gamespeed
+		end
 		
 		local previous_frame = tas.data[total_frames]
+		if previous_frame then
 		
-		if previous_frame and tas.settings.precautiousRecording then
-			
-			local half = 0.5
-			local fps_to_ms = math_ceil(1000 / tas.var.fps)
+			local fps_to_ms = 1000 / tas.var.fps
 			local fps_magnitude = tas.var.fps / 50
 			
-			if deltaTime >= fps_to_ms * 1.5 then
-
-				local x, y, z = unpack(p)
-				local x2, y2, z2 = unpack(previous_frame.p)
-				local segment_distance = tas.dist3D(x, y, z, x2, y2, z2)
-
-				if segment_distance < 300 then
-				
-					local vx, vy, vz = v[1]/fps_magnitude, v[2]/fps_magnitude, v[3]/fps_magnitude
-					local kmh = tas.dist3D(0, 0, 0, vx, vy, vz)
-					
-					if kmh > 0 then
-					
-						tas.data[total_frames].tick = math_ceil(previous_frame.tick - fps_to_ms + (segment_distance / kmh) * fps_to_ms)
-						tick = tas.data[total_frames].tick + fps_to_ms
-						
-						tas.var.record_tick = getTickCount() - tick
-						
-						if tas.settings.debugging.level >= 2 then
-							tas.data[total_frames].fixed = true
-							tas.prompt("Lag detected on frame $$#"..tostring(total_frames).."##, rewriting previous ticks..", 255, 150, 0)
-						end
-					
+			local x, y, z = unpack(p)
+			local x2, y2, z2 = unpack(previous_frame.p)
+			local segment_distance = tas.dist3D(x, y, z, x2, y2, z2)
+			
+			local vx, vy, vz = v[1]/fps_magnitude, v[2]/fps_magnitude, v[3]/fps_magnitude
+			local kmh = tas.dist3D(0, 0, 0, vx, vy, vz)
+		
+			if tas.settings.useGameSpeed then
+				if tas.var.gamespeed_event then
+					tas.data[total_frames].marked = {0, 0, 255}
+					if gamespeed ~= 1 then
+						tas.data[total_frames].tick = tas.data[total_frames].tick - fps_to_ms + (fps_to_ms * gamespeed)
+					else
+						tas.data[total_frames].tick = tas.data[total_frames].tick + deltaTime
 					end
+					tas.var.gamespeed_event = false
 				end
 			end
 			
+			tick = previous_frame.tick + deltaTime * gamespeed
+			
+			if deltaTime >= fps_to_ms * 2 then
+				tas.data[total_frames].tick = tas.data[total_frames].tick + ((segment_distance / kmh) * fps_to_ms)
+				tas.data[total_frames].marked = {0, 255, 0}
+				tick = previous_frame.tick + fps_to_ms * gamespeed
+			end
 		end
-	
+		
 		table_insert(tas.data, 	{
 			tick = tick,
 			p = p,
@@ -1313,8 +1324,10 @@ function tas.render_record(deltaTime)
 			k = keys,
 			g = ground,
 			a = analog,
+			gamespeed = gamespeed,
+			marked = marked,
 		})
-								
+		
 	else
 	
 		removeEventHandler("onClientPreRender", root, tas.render_record)
@@ -1327,6 +1340,71 @@ function tas.render_record(deltaTime)
 		end
 		
 		tas.prompt("Recording stopped due to an error! ($$#"..tostring(#tas.data).." ##frames)", 255, 100, 100)
+					
+	end
+end
+
+-- // Recording vehicle state
+function tas.record_state(vehicle)
+
+	if vehicle then
+	
+		local current_tick = getTickCount()
+		local real_time = current_tick - tas.var.record_tick
+	
+		local p = {getElementPosition(vehicle)}
+		local r = {getElementRotation(vehicle)}
+		local v = {getElementVelocity(vehicle)}
+		local rv = {getElementAngularVelocity(vehicle)}
+		
+		local health = getElementHealth(vehicle)
+		local model = getElementModel(vehicle)
+		
+		local nos
+		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
+			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
+			if count and level then
+				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
+			end
+		end
+		
+		local keys = nil
+		for k in pairs(tas.registered_keys) do
+			if getKeyState(k) then
+				if not keys then keys = {} end
+				table_insert(keys, k)
+			end
+		end
+		
+		local analog = nil
+		if tas.settings.enableAnalog and tas.settings.useAnalogWrapper then
+			if not analog then analog = {left = 0, right = 0} end
+			analog.left = math_abs(math_min(0, tas.var.analog_direction))
+			analog.right = math_abs(math_max(0, tas.var.analog_direction))
+		else
+			local anl = getPedAnalogControlState(localPlayer, "vehicle_left", true)
+			local anr = getPedAnalogControlState(localPlayer, "vehicle_right", true)
+			if anl ~= 0 and anl ~= 1 then
+				if not analog then analog = {left = 0, right = 0} end
+				analog.left = anl
+			end
+			if anr ~= 0 and anl ~= 1 then
+				if not analog then analog = {left = 0, right = 0} end
+				analog.right = anr
+			end
+		end
+		
+		local ground = nil
+		if tas.settings.debugging.detectGround then
+			for i=0,3 do
+				if isVehicleWheelOnGround(vehicle, i) then
+					ground = true
+					break
+				end
+			end
+		end
+		
+		return real_time, p, r, v, rv, health, model, nos, keys, ground, analog
 					
 	end
 end
@@ -1390,71 +1468,6 @@ addEventHandler("onClientPreRender", root, function()
 	end
 	
 end)
-
--- // Recording vehicle state
-function tas.record_state(vehicle, ped)
-
-	if vehicle then
-	
-		local current_tick = getTickCount()
-		local real_time = current_tick - tas.var.record_tick
-	
-		local p = {getElementPosition(vehicle)}
-		local r = {getElementRotation(vehicle)}
-		local v = {getElementVelocity(vehicle)}
-		local rv = {getElementAngularVelocity(vehicle)}
-		
-		local health = getElementHealth(vehicle)
-		local model = getElementModel(vehicle)
-		
-		local nos
-		if getVehicleUpgradeOnSlot(vehicle, 8) ~= 0 then
-			local count, level = getVehicleNitroCount(vehicle), getVehicleNitroLevel(vehicle)
-			if count and level then
-				nos = {c = count, l = level, a = isVehicleNitroActivated(vehicle)}
-			end
-		end
-		
-		local keys = nil
-		for k in pairs(tas.registered_keys) do
-			if getKeyState(k) then
-				if not keys then keys = {} end
-				table_insert(keys, k)
-			end
-		end
-		
-		local analog = nil
-		if tas.settings.enableAnalog and tas.settings.useAnalogWrapper then
-			if not analog then analog = {left = 0, right = 0} end
-			analog.left = math_abs(math_min(0, tas.var.analog_direction))
-			analog.right = math_abs(math_max(0, tas.var.analog_direction))
-		else
-			local anl = getPedAnalogControlState(localPlayer, "vehicle_left", true)
-			local anr = getPedAnalogControlState(localPlayer, "vehicle_right", true)
-			if anl ~= 0 and anl ~= 1 then
-				if not analog then analog = {left = 0, right = 0} end
-				analog.left = anl
-			end
-			if anr ~= 0 and anl ~= 1 then
-				if not analog then analog = {left = 0, right = 0} end
-				analog.right = anr
-			end
-		end
-		
-		local ground = nil
-		if tas.settings.debugging.detectGround then
-			for i=0,3 do
-				if isVehicleWheelOnGround(vehicle, i) then
-					ground = true
-					break
-				end
-			end
-		end
-		
-		return real_time, p, r, v, rv, health, model, nos, keys, ground, analog
-					
-	end
-end
 
 -- // Playbacking
 function tas.render_playback()
@@ -1696,7 +1709,7 @@ function tas.pathWay()
 	if tas.settings.debugging.level == 2 then
 	
 		local frameSkipping = (tas.var.playbacking == true and 1) or tas.settings.debugging.frameSkipping
-		local startFrame = (tas.var.playbacking == true and tas.var.play_frame + 2) or 1
+		local startFrame = (tas.var.playbacking == true and tas.var.play_frame + 2) or 0
 		local endFrame = (tas.var.playbacking == false and #tas.data - frameSkipping - 1) or math.min(tas.var.play_frame + tas.var.fps * 3, #tas.data - frameSkipping - 1)
 		
 		for i = startFrame, endFrame, frameSkipping do
@@ -1716,18 +1729,22 @@ function tas.pathWay()
 		local pX, pY, pZ = getElementPosition(localPlayer)
 		
 		if tas_data_total > 2 then
-			for i=2, tas_data_total do
+			for i=1, tas_data_total do
 				local x, y, z = unpack(tas.data[i].p)
 				
 				if not tas.settings.debugging.wholeFrameClipDistance or (tas.settings.debugging.wholeFrameClipDistance and tas.dist3D(pX, pY, pZ, x, y, z) < tas.settings.debugging.wholeFrameClipDistance) then
 					local vx, vy, vz = unpack(tas.data[i].v)
 					vx, vy, vz = vx/fps_magnitude, vy/fps_magnitude, vz/fps_magnitude
-					local fixed = (tas.data[i].fixed == true and {0, 255, 0}) or {255, 0, 0}
-					dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(fixed[1], fixed[2], fixed[3], 100), 5)
+					local rewrite = tas.data[i].marked or {255, 0, 0}
+					dxDrawLine3D(x, y, z-1, x, y, z+1, tocolor(rewrite[1], rewrite[2], rewrite[3], 100), 5)
 					
 					local swX, swY = getScreenFromWorldPosition(x, y, z+1.1, 2)
-					if swX and swY then
-						dxDrawText(tostring(i).." "..tostring(tas.data[i].tick).." "..tostring(tas.data[i].tick - tas.data[i-1].tick), swX, swY, swX, swY, tocolor(fixed[1], fixed[2], fixed[3], 255), 1, "arial", "center", "center")
+					if swX and swY then	
+						local frame_text = tostring(i).." "..tostring(tas.data[i].tick)
+						if i > 1 then
+							frame_text = tostring(i).." "..tostring(tas.float(tas.data[i].tick, 3)).." "..tostring(tas.float(tas.data[i].tick - tas.data[i-1].tick))
+						end
+						dxDrawText(frame_text, swX, swY, swX, swY, tocolor(rewrite[1], rewrite[2], rewrite[3], 255), 1, "arial", "center", "center")
 					end
 					
 					local velocity_magnitude = tas.dist3D(0, 0, 0, vx, vy, vz)
@@ -2042,6 +2059,12 @@ end
 -- // Used for efficient saving
 function tas.float(number)
 	return math_floor( number * 1000 ) * 0.001
+end
+
+-- // taken from https://stackoverflow.com/questions/57950030/wow-rounding-to-two-decimal-places-in-lua
+function tas.round(num, dp)
+    local mult = 10^(dp or 0)
+    return math_floor(num * mult + 0.5)/mult
 end
 
 -- // Calculate distance 2D (faster than the mta func)
