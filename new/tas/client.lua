@@ -1324,7 +1324,6 @@ function tas.render_record(deltaTime)
 			k = keys,
 			g = ground,
 			a = analog,
-			gamespeed = gamespeed,
 			marked = marked,
 		})
 		
@@ -2002,6 +2001,11 @@ function tas.globalRequestData(handleType, ...)
 end
 addEvent("tas:onClientGlobalRequest", true)
 addEventHandler("tas:onClientGlobalRequest", root, tas.globalRequestData)
+
+-- // might come in handy for devs
+function getTASData()
+	return tas
+end
 
 -- // Nitro detection and modify stats (playback and load warp)
 function tas.nos(vehicle, data)
