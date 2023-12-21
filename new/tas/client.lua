@@ -742,7 +742,7 @@ function tas.commands(cmd, ...)
 					keys = table_concat(run.k, ",")
 				end
 				
-				fileWrite(save_file, string_format("%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", run.tick, tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math_max(1, run.h), run.m, nos, keys).."\n")
+				fileWrite(save_file, string_format("%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s|%s", tas.float(run.tick), tas.float(run.p[1]), tas.float(run.p[2]), tas.float(run.p[3]), tas.float(run.r[1]), tas.float(run.r[2]), tas.float(run.r[3]), tas.float(run.v[1]), tas.float(run.v[2]), tas.float(run.v[3]), tas.float(run.rv[1]), tas.float(run.rv[2]), tas.float(run.rv[3]), math_max(1, run.h), run.m, nos, keys).."\n")
 			end
 			
 			fileWrite(save_file, "-run\n")
@@ -762,7 +762,7 @@ function tas.commands(cmd, ...)
 					end
 					
 					if warp.tick then
-						fileWrite(save_file, string_format("%d|%d|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, warp.tick, tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), math_max(1, warp.h), warp.m, nos).."\n")
+						fileWrite(save_file, string_format("%d|%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%s,%s,%s|%d|%d|%s", warp.frame, tas.float(warp.tick), tas.float(warp.p[1]), tas.float(warp.p[2]), tas.float(warp.p[3]), tas.float(warp.r[1]), tas.float(warp.r[2]), tas.float(warp.r[3]), tas.float(warp.v[1]), tas.float(warp.v[2]), tas.float(warp.v[3]), tas.float(warp.rv[1]), tas.float(warp.rv[2]), tas.float(warp.rv[3]), math_max(1, warp.h), warp.m, nos).."\n")
 					end
 					
 				end
@@ -1293,7 +1293,7 @@ function tas.render_record(deltaTime)
 		
 			if tas.settings.useGameSpeed then
 				if tas.var.gamespeed_event then
-					tas.data[total_frames].marked = {0, 0, 255}
+					tas.data[total_frames].marked = {255, 255, 255}
 					if gamespeed ~= 1 then
 						tas.data[total_frames].tick = tas.data[total_frames].tick - fps_to_ms + (fps_to_ms * gamespeed)
 					else
@@ -1302,6 +1302,8 @@ function tas.render_record(deltaTime)
 					tas.var.gamespeed_event = false
 				end
 			end
+			
+			marked = (gamespeed ~= 1 and {0, 0, 255}) or nil
 			
 			tick = previous_frame.tick + deltaTime * gamespeed
 			
@@ -2063,12 +2065,6 @@ end
 -- // Used for efficient saving
 function tas.float(number)
 	return math_floor( number * 1000 ) * 0.001
-end
-
--- // taken from https://stackoverflow.com/questions/57950030/wow-rounding-to-two-decimal-places-in-lua
-function tas.round(num, dp)
-    local mult = 10^(dp or 0)
-    return math_floor(num * mult + 0.5)/mult
 end
 
 -- // Calculate distance 2D (faster than the mta func)
