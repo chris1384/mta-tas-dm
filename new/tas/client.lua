@@ -295,7 +295,7 @@ function tas.init()
 		if type(bound_keys) == "table" then
 			for bound, _ in pairs(bound_keys) do
 				if not tas.registered_keys[bound] then tas.registered_keys[bound] = {} end
-				tas.registered_keys[bound][control] = true
+				--tas.registered_keys[bound][control] = true
 				tas.registered_keys[bound].c_bind = bind
 			end
 		end
@@ -983,6 +983,8 @@ function tas.commands(cmd, ...)
 			
 			fileClose(load_file)
 			
+			tas.timers.warnSave = nil
+			
 			local hunter_found = nil
 			for i=#tas.data, 1, -1 do
 				if hunter_found == nil then
@@ -1038,6 +1040,7 @@ function tas.commands(cmd, ...)
 		end
 		
 		tas.timers.warnClear = nil
+		tas.timers.warnSave = nil
 		
 		tas.var.rewinding = false
 		if tas.timers.rewind_load then
@@ -1607,12 +1610,8 @@ function tas.render_playback()
 		
 		tas.resetBinds()
 		if frame_data.k then
-			for k,v in pairs(tas.registered_keys) do
-				for _,h in ipairs(frame_data.k) do
-					if k == h then
-						setPedControlState(localPlayer, tas.key_mappings[v.c_bind], true)
-					end
-				end
+			for k,v in ipairs(frame_data.k) do
+				setPedControlState(localPlayer, tas.key_mappings[v], true)
 			end
 		end
 		
