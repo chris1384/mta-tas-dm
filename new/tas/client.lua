@@ -189,7 +189,10 @@ tas.registered_commands = {
 }
 
 -- // Registered keys
-tas.registered_keys = {
+tas.registered_keys = {}
+
+-- // Global key mappings, to use as a fix for different keyboard layouts and avoid incompatibility
+tas.key_mappings = {
 	w = "accelerate", 
 	a = "vehicle_left",
 	s = "brake_reverse",
@@ -201,6 +204,10 @@ tas.registered_keys = {
 	arrow_l = "vehicle_left",
 	lctrl = "vehicle_fire",
 	lalt = "vehicle_secondary_fire",
+	-- q = "vehicle_look_left",
+	-- e = "vehicle_look_right",
+	-- num_4 = "special_control_right",
+	-- num_6 = "special_control_left",
 }
 						
 --[[ 
@@ -276,12 +283,22 @@ local string_format = string.format
 
 -- // Local Functions End
 
-
 -- // Initialization
 function tas.init()
 	
 	for _,v in pairs(tas.registered_commands) do
 		addCommandHandler(v, tas.commands)
+	end
+	
+	for bind, control in pairs(tas.key_mappings) do
+		local bound_keys = getBoundKeys(control)
+		if type(bound_keys) == "table" then
+			for bound, _ in pairs(bound_keys) do
+				if not tas.registered_keys[bound] then tas.registered_keys[bound] = {} end
+				tas.registered_keys[bound][control] = true
+				tas.registered_keys[bound].c_bind = bind
+			end
+		end
 	end
 	
 	addEventHandler("onClientRender", root, tas.dxDebug, true, "low-1384")
@@ -707,14 +724,20 @@ function tas.commands(cmd, ...)
 		if args[1] == nil then 
 			tas.prompt("Saving failed, please specify a $$name ##for your file!", 255, 100, 100) 
 			tas.prompt("Example: $$/"..tas.registered_commands.save_record.." bbw", 255, 100, 100) 
-			return 
+			return
 		end
 		if #tas.data == 0 then tas.prompt("Saving failed, no $$data ##recorded!", 255, 100, 100) return end
 		
 		local isPrivated = (tas.settings.usePrivateFolder == true and "@") or ""
 		local fileTarget = isPrivated .."saves/"..args[1]..".tas"
 		
-		if fileExists(fileTarget) then tas.prompt("Saving failed, file with the same name $$already ##exists!", 255, 100, 100) return end
+		if tas.settings.useWarnings then
+			if fileExists(fileTarget) and not tas.timers.warnSave then
+				tas.timers.warnSave = setTimer(function() tas.timers.warnSave = nil end, 5000, 1)
+				tas.prompt("Existing file $$'"..args[1]..".tas' ##found! Use $$/"..tas.registered_commands.save_record.." "..args[1].." ##again to overwrite the file.", 255, 100, 100)
+				return
+			end
+		end
 		
 		local save_file = fileCreate(fileTarget)
 		if save_file then
@@ -771,6 +794,8 @@ function tas.commands(cmd, ...)
 			-- //
 			
 			fileClose(save_file)
+			
+			tas.timers.warnSave = nil
 			
 			tas.prompt("Your run has been saved ".. (tas.settings.usePrivateFolder == true and "$$privately ##" or "").."to $$'saves/"..args[1]..".tas'##!", 255, 255, 100)
 		end
@@ -989,6 +1014,8 @@ function tas.commands(cmd, ...)
 		
 		local status = (tas.settings.trigger_mapStart == true) and "ENABLED" or "DISABLED"
 		
+		updateUserConfig()
+		
 		tas.prompt("Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
 	
 	-- // Clear all data
@@ -1042,6 +1069,8 @@ function tas.commands(cmd, ...)
 		
 		tas.settings.debugging.level = debug_number
 		
+		updateUserConfig()
+		
 		tas.prompt("Debugging level is now set to: $$".. tostring(debug_number), 255, 100, 255)
 		
 	-- // Change settings
@@ -1091,12 +1120,7 @@ function tas.commands(cmd, ...)
 					tas.settings[key] = value
 					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
 					
-					if fileExists("@config.json") then fileDelete("@config.json") end
-					local save_cvar_file = fileCreate("@config.json")
-					if save_cvar_file then
-						fileWrite(save_cvar_file, toJSON(tas.settings))
-						fileClose(save_cvar_file)
-					end
+					updateUserConfig()
 					
 				else
 					tas.prompt("Setting cvar failed, invalid key $$value##!", 255, 100, 100)
@@ -1372,10 +1396,10 @@ function tas.record_state(vehicle)
 		end
 		
 		local keys = nil
-		for k in pairs(tas.registered_keys) do
-			if getKeyState(k) then
+		for key, control in pairs(tas.registered_keys) do
+			if getKeyState(key) then
 				if not keys then keys = {} end
-				table_insert(keys, k)
+				table_insert(keys, control.c_bind)
 			end
 		end
 		
@@ -1586,7 +1610,7 @@ function tas.render_playback()
 			for k,v in pairs(tas.registered_keys) do
 				for _,h in ipairs(frame_data.k) do
 					if k == h then
-						setPedControlState(localPlayer, v, true)
+						setPedControlState(localPlayer, tas.key_mappings[v.c_bind], true)
 					end
 				end
 			end
@@ -1814,7 +1838,7 @@ end
 
 -- // Resetting ped controls
 function tas.resetBinds()
-	for _,v in pairs(tas.registered_keys) do
+	for _,v in pairs(tas.key_mappings) do
 		setPedControlState(localPlayer, v, false)
 	end
 	setAnalogControlState("vehicle_right", 0, false)
@@ -2005,6 +2029,15 @@ function tas.globalRequestData(handleType, ...)
 end
 addEvent("tas:onClientGlobalRequest", true)
 addEventHandler("tas:onClientGlobalRequest", root, tas.globalRequestData)
+
+function updateUserConfig()
+	if fileExists("@config.json") then fileDelete("@config.json") end
+	local save_cvar_file = fileCreate("@config.json")
+	if save_cvar_file then
+		fileWrite(save_cvar_file, toJSON(tas.settings))
+		fileClose(save_cvar_file)
+	end
+end
 
 -- // might come in handy for devs
 function getTASData()
