@@ -1308,9 +1308,11 @@ function tas.render_record(deltaTime)
 			tick = previous_frame.tick + deltaTime * gamespeed
 			
 			if deltaTime >= fps_to_ms * 2 then
-				tas.data[total_frames].tick = tas.data[total_frames].tick + ((segment_distance / kmh) * fps_to_ms)
-				tas.data[total_frames].marked = {0, 255, 0}
-				tick = previous_frame.tick + fps_to_ms * gamespeed
+				if kmh > 0 and segment_distance < 100 then
+					tas.data[total_frames].tick = tas.data[total_frames].tick + ((segment_distance / kmh) * fps_to_ms)
+					tas.data[total_frames].marked = {0, 255, 0}
+					tick = previous_frame.tick + fps_to_ms * gamespeed
+				end
 			end
 		end
 		
