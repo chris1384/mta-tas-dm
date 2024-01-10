@@ -263,10 +263,21 @@ addEventHandler("onRaceStateChanging", root, function(new)
 	
 end)
 
--- // Model Change Resync with clients (might break up)
-addEvent("tas:onModelChange", true)
-addEventHandler("tas:onModelChange", root, function(model)
-	setElementModel(source, model)
+-- // Model Change Resync with clients (might break up) | NOS syncing
+addEvent("tas:syncClient", true)
+addEventHandler("tas:syncClient", root, function(event, value)
+
+	local vehicle = source
+	
+	if event == "vehiclechange" then
+		setElementModel(vehicle, value)
+	elseif event == "nos" then
+		if value == true then
+			addVehicleUpgrade(vehicle, 1010)
+		else
+			removeVehicleUpgrade(vehicle, getVehicleUpgradeOnSlot(vehicle, 8))
+		end
+	end
 end)
 
 addEventHandler("onPlayerQuit", root, function()
