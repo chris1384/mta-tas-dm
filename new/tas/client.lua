@@ -295,7 +295,6 @@ function tas.init()
 		if type(bound_keys) == "table" then
 			for bound, _ in pairs(bound_keys) do
 				if not tas.registered_keys[bound] then tas.registered_keys[bound] = {} end
-				--tas.registered_keys[bound][control] = true
 				tas.registered_keys[bound].c_bind = bind
 			end
 		end
@@ -527,7 +526,7 @@ function tas.commands(cmd, ...)
 		if tas.settings.useVehicleChange then
 			if getElementModel(vehicle) ~= w_data.m then
 				setElementModel(vehicle, w_data.m)
-				triggerServerEvent("tas:onModelChange", vehicle, w_data.m)
+				triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", w_data.m)
 			end
 		end
 		
@@ -627,7 +626,7 @@ function tas.commands(cmd, ...)
 		if tas.settings.useVehicleChange then
 			if getElementModel(vehicle) ~= resume_data.m then
 				setElementModel(vehicle, resume_data.m)
-				triggerServerEvent("tas:onModelChange", vehicle, resume_data.m)
+				triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", resume_data.m)
 			end
 		end
 		
@@ -699,7 +698,7 @@ function tas.commands(cmd, ...)
 		
 		if getElementModel(vehicle) ~= tas.data[tas.var.play_frame].m then
 			setElementModel(vehicle, tas.data[tas.var.play_frame].m)
-			triggerServerEvent("tas:onModelChange", vehicle, tas.data[tas.var.play_frame].m)
+			triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", tas.data[tas.var.play_frame].m)
 		end
 
 		if not tas.var.playbacking then
@@ -1217,7 +1216,7 @@ function tas.render_record(deltaTime)
 				if tas.settings.useVehicleChange then
 					if model ~= frame_data.m then
 						setElementModel(vehicle, frame_data.m)
-						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+						triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", frame_data.m)
 					end
 				end
 				
@@ -1282,7 +1281,7 @@ function tas.render_record(deltaTime)
 				if tas.settings.useVehicleChange then
 					if getElementModel(vehicle) ~= frame_data.m then
 						setElementModel(vehicle, frame_data.m)
-						triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+						triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", frame_data.m)
 					end
 				end
 				setElementHealth(vehicle, (tas.settings.antiExplode == true and math_max(frame_data.h, 251)) or frame_data.h)
@@ -1597,7 +1596,7 @@ function tas.render_playback()
 				
 				if model ~= frame_data.m then
 					setElementModel(vehicle, frame_data.m)
-					triggerServerEvent("tas:onModelChange", vehicle, frame_data.m)
+					triggerServerEvent("tas:syncClient", vehicle, "vehiclechange", frame_data.m)
 				end
 				
 			end
@@ -2050,6 +2049,7 @@ function tas.nos(vehicle, data)
 		if data ~= nil then
 			if nos_upgrade == 0 then
 				addVehicleUpgrade(vehicle, 1010)
+				triggerServerEvent("tas:syncClient", vehicle, "nos", true)
 			end
 			setVehicleNitroCount(vehicle, data.c)
 			setVehicleNitroLevel(vehicle, data.l)
@@ -2057,6 +2057,7 @@ function tas.nos(vehicle, data)
 		else
 			if nos_upgrade ~= 0 then
 				removeVehicleUpgrade(vehicle, nos_upgrade)
+				triggerServerEvent("tas:syncClient", vehicle, "nos", false)
 			end
 		end
 	end
