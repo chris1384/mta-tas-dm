@@ -1,7 +1,7 @@
 --[[
 		* TAS - Recording Tool by chris1384 @2020
-		* version 1.4.2
---]]
+		* version 1.4.3
+]]
 
 -- // the root of your problems
 local tas = {
@@ -30,6 +30,14 @@ local tas = {
 		fps = getFPSLimit(), -- current fps of the user, can change during recording or when you're starting a new one
 		gamespeed = getGameSpeed(), -- used for slowmotion recording
 		gamespeed_event = false, -- used for slowmotion recording
+		
+		editor = "none", 
+		--[[ Editor mode, it can be:
+			- none : editor_gui is inactive (resource not running or map testing - default behaviour)
+			- freecam : you're currently flying in editor (uses frameSkipping for pathway = low CPU usage)
+			- cursor : you're in cursor mode (dummy vehicles can be created, frameSkipping disabled)
+		]]
+		editor_select = false, -- selected waypoint
 	},
 			
 	data = {}, -- run data
@@ -65,6 +73,12 @@ local tas = {
 		abortOnInvalidity = false, -- prevent TAS from loading any more lines (when using /loadr) if it finds an invalid one. you can end up with only half of the recording loaded, so keep this to false.
 		
 		hunterFinish = false, -- stop recording/playbacking as soon as the player has reached the hunter (model change detection). setting this to true can have undesired effects while gameplaying.
+		
+		enableEditorMode = true, --[[
+			use TAS as an alternative to MRT (to create vehicle dummy on waypoints). 
+			WARNING: this overrides the /debugr pathway
+		]]
+		editorDummyKey = "v", -- create vehicle dummy key
 		-- //
 		
 		
@@ -301,6 +315,7 @@ function tas.init()
 	end
 	
 	addEventHandler("onClientRender", root, tas.dxDebug, true, "low-1384")
+	bindKey(tas.settings.editorDummyKey, "down", tas.binds)
 	
 	tas.textures.triangle = svgCreate(40, 80, [[<svg height="40" width="40"><polygon points="0,20 40,0 40,40" style="fill:white"/></svg>]])
 	
@@ -328,7 +343,7 @@ function tas.init()
 	-- // << Until here 
 	
 	if tas.settings.startPrompt then
-		tas.prompt("Recording Tool $$v1.4.2 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
+		tas.prompt("Recording Tool $$v1.4.3 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
 		tas.prompt("Type $$/tashelp ##for commands!", 255, 100, 100)
 		
 		if config_loaded then
@@ -340,10 +355,15 @@ end
 addEventHandler("onClientResourceStart", resourceRoot, tas.init)
 
 -- // Termination
-function tas.stop()
-	tas.resetBinds()
+function tas.stop(stoppedResource)
+	local resourceName = getResourceName(stoppedResource)
+	if stoppedResource == resource then
+		tas.resetBinds()
+	elseif resourceName == "editor" then
+		tas.var.editor = "none"
+	end
 end
-addEventHandler("onClientResourceStop", resourceRoot, tas.stop)
+addEventHandler("onClientResourceStop", root, tas.stop)
 
 -- // Event Commands
 function tas.commands(cmd, ...) 
@@ -354,8 +374,8 @@ function tas.commands(cmd, ...)
 	
 	if cmd == tas.registered_commands.tas then
 		if #args == 0 then
-			outputChatBox(" ")
-			tas.prompt("Recording Tool $$v1.4.2 ##by #FFAAFFchris1384", 255, 100, 100)
+			tas.prompt("")
+			tas.prompt("Recording Tool $$v1.4.3 ##by #FFAAFFchris1384##!", 255, 100, 100)
 			tas.prompt("For updates and documentation, please see the $$GitHub ##link below:", 255, 100, 100)
 			tas.prompt("https://github.com/chris1384/mta-tas-dm $$(copied to clipboard)", 255, 100, 255)
 			tas.prompt("For #64FF64futher help ##or #FF3232bug reports##, please send me a message on #5865F2Discord##!", 255, 100, 100)
@@ -1118,7 +1138,7 @@ function tas.commands(cmd, ...)
 		end 
 		
 		if key == "show" then
-			outputChatBox(" ")
+			tas.prompt("")
 			tas.prompt("Configurable variables list:", 255, 100, 255)
 			for k,v in pairs(tas.settings) do
 				if type(v) ~= "table" then
@@ -1183,7 +1203,7 @@ function tas.commands(cmd, ...)
 		local page_target = tas.clamp(1, tonumber(args[1]) or 1, page_count)
 		local page_rows = 5*(page_target-1)
 		
-		outputChatBox(" ") -- lol
+		tas.prompt("")
 		tas.prompt("Commands List $$(page "..tostring(page_target).."/"..tostring(page_count)..")##:", 255, 100, 100)
 		for i=1+page_rows,5+page_rows do
 			tas.prompt(all_commands[i], 255, 100, 100)
@@ -1698,6 +1718,7 @@ local screenW, screenH = guiGetScreenSize()
 -- // Drawing debug
 function tas.dxDebug()
 
+
 	local offsetX = tas.settings.debugging.offsetX
 	
 	if tas.settings.debugging.level >= 1 then
@@ -1764,6 +1785,12 @@ function tas.dxDebug()
 		
 		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Time: #6464FF".. tostring(playback_runtime), screenW/2-offsetX+170, screenH-200+18*6, 1)
 		
+		if tas.var.editor == "none" then
+			tas.pathWay()
+		end
+	end
+	
+	if tas.var.editor ~= "none" then
 		tas.pathWay()
 	end
 	
@@ -1775,6 +1802,68 @@ function tas.dxDebug()
 end
 
 function tas.pathWay()
+
+	if tas.settings.enableEditorMode and tas.var.editor ~= "none" then
+
+		local cursorX, cursorY
+		if isCursorShowing() then
+			cursorX, cursorY = getCursorPosition()
+			cursorX, cursorY = cursorX * screenW, cursorY * screenH
+		end
+		
+		local function isMouseInPosition(x, y, w, h)
+			if not cursorX or not cursorY then return false end
+			--dxDrawRectangle(x, y, w, h, 0xAA00FF00)
+			return ((cursorX >= x and cursorX <= x + w) and (cursorY >= y and cursorY <= y + h))
+		end
+	
+		local pX, pY, pZ = getElementPosition(localPlayer)
+		
+		if tas.var.editor == "cursor" then
+			local foundWaypoint = false
+			for i = 1, #tas.data - 1 do
+				local x, y, z = unpack(tas.data[i].p)
+				if not tas.settings.debugging.wholeFrameClipDistance or (tas.settings.debugging.wholeFrameClipDistance and tas.dist3D(pX, pY, pZ, x, y, z) < tas.settings.debugging.wholeFrameClipDistance) then
+					local x2, y2, z2 = unpack(tas.data[i + 1].p)
+					--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+					dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 10)
+					dxDrawLine3D(x, y, z+0.15, x, y, z-0.15, 0xFFFFFFFF, 5)
+					
+					if not foundWaypoint then
+						local sX, sY = getScreenFromWorldPosition(x, y, z, 0.05, false)
+						if sX and sY then
+							if cursorX and cursorY then
+								--dxDrawRectangle(sX-5, sY-10, 10, 20, 0xAA00FF00)
+								if isMouseInPosition(sX-10, sY-20, 20, 40) then
+									foundWaypoint = tas.data[i]
+								end
+							end
+						end
+					end
+				end
+			end
+			if foundWaypoint then
+				tas.var.editor_select = foundWaypoint
+				local dummyKeyText = "Press #FF6464'"..tas.settings.editorDummyKey:upper().."' #FFFFFFto spawn dummy"
+				dxDrawText(string_gsub(dummyKeyText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + 1, cursorX + 30 + 1, cursorY + 40 + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
+				dxDrawText(dummyKeyText, cursorX - 10, cursorY + 30, cursorX + 30, cursorY + 40, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
+			else
+				tas.var.editor_select = false
+			end
+			
+		elseif tas.var.editor == "freecam" then
+			for i = 1, #tas.data - 1, tas.settings.debugging.frameSkipping do
+				local x, y, z = unpack(tas.data[i].p)
+				local x2, y2, z2
+				local last = tas.data[i + tas.settings.debugging.frameSkipping]
+				if not last then last = tas.data[#tas.data] end
+				x2, y2, z2 = unpack(last.p)
+				--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+				dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 15)
+			end
+		end
+		return
+	end
 
 	if tas.settings.debugging.level == 2 then
 	
@@ -1867,6 +1956,42 @@ function tas.pathWay()
 	
 end
 
+-- // Binds
+function tas.binds(key, state)
+	if key == tas.settings.editorDummyKey and state == "down" then
+		if tas.var.editor_select then
+			local data = tas.var.editor_select
+			triggerServerEvent("tas:edfCreate", localPlayer)
+			triggerServerEvent("doCreateElement", localPlayer, "vehicle", "editor_main", {position = data.p, rotation = data.r, model = data.m}, false, false)
+		end
+	end
+end
+
+-- // Editor Events
+addEvent("onEditorSuspended")
+addEventHandler("onEditorSuspended", root, function(...)
+	tas.var.editor = "none"
+end)
+addEvent("onEditorResumed")
+addEventHandler("onEditorResumed", root, function(...)
+	setTimer(function()
+		tas.var.editor = isCursorShowing() == true and "cursor" or "freecam"
+	end, 150, 1)
+end)
+addEvent("onCursorMode")
+addEventHandler("onCursorMode", root, function(...)
+	tas.var.editor = "cursor"
+end)
+addEvent("onFreecamMode")
+addEventHandler("onFreecamMode", root, function(...)
+	tas.var.editor = "freecam"
+end)
+
+function onEditorStop()
+
+end
+addEventHandler("onClientResourceStop", root, onEditorStop)
+
 -- // Cute dxKeybind
 function tas.dxKey(keyName, x, y, x2, y2, color)
 	dxDrawRectangle(x, y, x2, y2, color or tocolor(200, 200, 200, 200))
@@ -1891,16 +2016,18 @@ end
 -- // Command messages
 function tas.prompt(text, r, g, b)
 	if type(text) ~= "string" then return end
+	local r, g, b = r or 255, g or 100, b or 100
+	local prefix = (text ~= "" and "[TAS] ") or ""
 	if tas.settings.promptType == 1 then
-		return outputChatBox("[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
+		return outputChatBox(prefix.."#FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
 	elseif tas.settings.promptType == 2 then
 		if not tas.var.prompts then tas.var.prompts = {} end
-		table_insert(tas.var.prompts, string_format("#%.2X%.2X%.2X", r, g, b).."[TAS] #FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)))
+		table_insert(tas.var.prompts, string_format("#%.2X%.2X%.2X", r, g, b) .. prefix .."#FFFFFF"..string_gsub(string_gsub(text, "%#%#", "#FFFFFF"), "%$%$", string_format("#%.2X%.2X%.2X", r, g, b)))
 		if #tas.var.prompts > 15 then
 			table_remove(tas.var.prompts, 1)
 		end
 	elseif tas.settings.promptType == 3 then
-		return iprint("[TAS] "..string_gsub(string_gsub(text, "%#%#", ""), "%$%$", ""))
+		return iprint(prefix .. string_gsub(string_gsub(text, "%#%#", ""), "%$%$", ""))
 	end
 end
 
@@ -1931,7 +2058,7 @@ function tas.vultaicWrap(extra)
 		tas.raceWrap("Started")
 	end
 end
-for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown"}) do
+for vultaicIndex,vultaicEvents in ipairs({"onClientTimeIsUpDisplayRequest", "onClientArenaGridCountdown", "*!TfFEv3ntS3c!*:onClientArenaGridCountdown", "*!TfFEv3ntS3c!*:onClientTimeIsUpDisplayRequest"}) do
 	addEvent(vultaicEvents)
 	addEventHandler(vultaicEvents, root, tas.vultaicWrap)
 end
