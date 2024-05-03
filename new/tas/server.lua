@@ -1,12 +1,13 @@
 --[[
 		* TAS - Recording Tool by chris1384 @2020
-		* version 1.4
+		* version 1.4.3
 --]]
 
 local tas = {
 	var = {
 		cooldowns = {},
 		handles = {},
+		isCreatingDummy = false,
 	},
 	settings = {
 	
@@ -276,6 +277,54 @@ addEventHandler("tas:syncClient", root, function(event, value)
 			addVehicleUpgrade(vehicle, 1010)
 		else
 			removeVehicleUpgrade(vehicle, getVehicleUpgradeOnSlot(vehicle, 8))
+		end
+	end
+end)
+
+
+-- // Semi-wrapper for edf vehicle creator
+addEvent("tas:edfCreate", true)
+addEventHandler("tas:edfCreate", root, function()
+	tas.var.isCreatingDummy = true
+end)
+
+-- // Event triggered by editor
+addEvent("onElementCreate")
+addEventHandler("onElementCreate", root, function()
+	local element = source
+	if getElementType(element) == "vehicle" then
+		if tas.var.isCreatingDummy then -- yeah we sure are applying these down here
+		
+			-- // Apply position and rotation
+			local x, y, z = getElementPosition(source)
+			exports.edf:edfSetElementPosition(source, x, y, z)
+			local rx, ry, rz = getElementRotation(source)
+			exports.edf:edfSetElementRotation(source, rx, ry, rz, "ZYX")
+			
+			-- // Tuning stuff
+			exports.edf:edfSetElementProperty(source, "collisions", "false")
+			exports.edf:edfSetElementProperty(source, "locked", "true")
+			exports.edf:edfSetElementProperty(source, "frozen", "true")
+			exports.edf:edfSetElementProperty(source, "upgrades", {1097, 1010})
+			exports.edf:edfSetElementProperty(source, "plate", "TASDUMMY")
+			
+			-- // Set custom ID, fuckin override everything idc
+			local testID = 1
+			while getElementByID("TAS:Dummy ("..tostring(testID)..")") do
+				testID = testID + 1
+			end
+			local newID = "TAS:Dummy ("..tostring(testID)..")"
+			setElementID(source, newID)
+			setElementData(source, "id", newID)
+			setElementData(source, "me:ID", newID)
+			setElementData(source, "me:autoID", true)
+			exports.edf:edfSetElementProperty(source, "id", newID)
+			
+			-- // Pretty color
+			setVehicleColor(source, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255)
+			
+			-- // We finished? Hell yeah, disable this so we don't apply dummy properties
+			tas.var.isCreatingDummy = false
 		end
 	end
 end)
