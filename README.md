@@ -1,5 +1,5 @@
 <a href='https://lua.org' target="_blank"><img alt='lua' src='https://img.shields.io/badge/mom_i made it in lua-100000?style=plastic&logo=lua&logoColor=white&labelColor=5C5C5C&color=5E56FF'/></a>
-
+<a href='https://buymeacoffee.com/chris1384' target="_blank"><img alt='Buy me a Coffee!' src='https://img.shields.io/badge/Buy%20Me%20A%20Coffee!-FF8000'/></a>
 ### NOTE: THIS RESOURCE IS NOT INTENDED FOR CHEATING! ANY REQUEST REGARDING TAS IMPLEMENTATION ON OTHER SERVERS/PROVIDING SERVER VULNERABILITIES IS NOT TOLERATED AND WILL BE IGNORED!
 
 ## Recording & Seamless Segmenting Run Tool v1.4 for MTA:SA
