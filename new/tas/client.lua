@@ -38,6 +38,7 @@ local tas = {
 			- cursor : you're in cursor mode (dummy vehicles can be created, frameSkipping disabled)
 		]]
 		editor_select = false, -- selected waypoint
+		editor_dummy_client = nil, -- preview dummy before getting created to the server
 	},
 			
 	data = {}, -- run data
@@ -76,8 +77,11 @@ local tas = {
 		
 		enableEditorMode = true, --[[
 			use TAS as an alternative to MRT (to create vehicle dummy on waypoints). 
+			this also binds the record/resume command to 'R' key like MRT.
 			WARNING: this overrides the /debugr pathway
 		]]
+		editorRecordKey = "r", -- you know what it is
+		editorRecordMode = "new", -- how the /record command is behaving in editor. this can be: 'new' - start a new recording; 'resume' - resume from last waypoint.
 		editorDummyKey = "v", -- create vehicle dummy key
 		-- //
 		
@@ -264,6 +268,9 @@ local getPedControlState = getPedControlState
 local setPedControlState = setPedControlState
 local getAnalogControlState = getAnalogControlState
 local setAnalogControlState = setAnalogControlState
+local getCursorPosition = getCursorPosition
+local isCursorShowing = isCursorShowing
+local getScreenFromWorldPosition = getScreenFromWorldPosition
 
 local dxDrawText = dxDrawText
 local dxDrawLine3D = dxDrawLine3D
@@ -284,6 +291,7 @@ local math_min = math.min
 local math_max = math.max
 local math_floor = math.floor
 local math_ceil = math.ceil
+local screenW, screenH = guiGetScreenSize()
 
 -- // Other
 local table_insert = table.insert
@@ -315,7 +323,7 @@ function tas.init()
 	end
 	
 	addEventHandler("onClientRender", root, tas.dxDebug, true, "low-1384")
-	bindKey(tas.settings.editorDummyKey, "down", tas.binds)
+	addEventHandler("onClientKey", root, tas.binds)
 	
 	tas.textures.triangle = svgCreate(40, 80, [[<svg height="40" width="40"><polygon points="0,20 40,0 40,40" style="fill:white"/></svg>]])
 	
@@ -359,6 +367,7 @@ function tas.stop(stoppedResource)
 	local resourceName = getResourceName(stoppedResource)
 	if stoppedResource == resource then
 		tas.resetBinds()
+		exports["editor_main"]:setWorldClickEnabled(true)
 	elseif resourceName == "editor" then
 		tas.var.editor = "none"
 	end
@@ -1713,11 +1722,8 @@ function tas.render_playback()
 	end
 end
 
-local screenW, screenH = guiGetScreenSize()
-
 -- // Drawing debug
 function tas.dxDebug()
-
 
 	local offsetX = tas.settings.debugging.offsetX
 	
@@ -1785,20 +1791,16 @@ function tas.dxDebug()
 		
 		tas.dxText("Playback Frame: #6464FF#".. tostring(tas.var.play_frame).." #FFFFFF| Time: #6464FF".. tostring(playback_runtime), screenW/2-offsetX+170, screenH-200+18*6, 1)
 		
-		if tas.var.editor == "none" then
-			tas.pathWay()
-		end
 	end
 	
-	if tas.var.editor ~= "none" then
-		tas.pathWay()
-	end
+	tas.pathWay()
 	
 	if tas.settings.promptType == 2 then
 		for i=1, #tas.var.prompts do
 			tas.dxText(tas.var.prompts[i], 30, screenH/2-150+18*(i-1), 1)
 		end
 	end
+	
 end
 
 function tas.pathWay()
@@ -1833,8 +1835,9 @@ function tas.pathWay()
 						local sX, sY = getScreenFromWorldPosition(x, y, z, 0.05, false)
 						if sX and sY then
 							if cursorX and cursorY then
-								--dxDrawRectangle(sX-5, sY-10, 10, 20, 0xAA00FF00)
-								if isMouseInPosition(sX-10, sY-20, 20, 40) then
+								local detectionWidth = 1 -- this can be helpful but annoying
+								local detectionHeight = tas.var.editor_dummy_client ~= nil and 5 or 1 -- this can be helpful but annoying
+								if isMouseInPosition(sX-(10*detectionWidth), sY-(20*detectionHeight), 20*detectionWidth, 40*detectionHeight) then
 									foundWaypoint = tas.data[i]
 								end
 							end
@@ -1847,8 +1850,20 @@ function tas.pathWay()
 				local dummyKeyText = "Press #FF6464'"..tas.settings.editorDummyKey:upper().."' #FFFFFFto spawn dummy"
 				dxDrawText(string_gsub(dummyKeyText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + 1, cursorX + 30 + 1, cursorY + 40 + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
 				dxDrawText(dummyKeyText, cursorX - 10, cursorY + 30, cursorX + 30, cursorY + 40, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
+				if tas.var.editor_dummy_client then
+					local data = tas.var.editor_select
+					
+					-- // smoother preview but can get buggy due to inconsistent cursor detection
+					--local x, y, z = getElementPosition(tas.var.editor_dummy_client)
+					--setElementPosition(tas.var.editor_dummy_client, tas.lerp(x, data.p[1], 0.25), tas.lerp(y, data.p[2], 0.25), tas.lerp(z, data.p[3], 0.25))
+					
+					setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
+					setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
+				end
 			else
-				tas.var.editor_select = false
+				if not tas.var.editor_dummy_client then
+					tas.var.editor_select = false
+				end
 			end
 			
 		elseif tas.var.editor == "freecam" then
@@ -1958,11 +1973,52 @@ end
 
 -- // Binds
 function tas.binds(key, state)
-	if key == tas.settings.editorDummyKey and state == "down" then
-		if tas.var.editor_select then
-			local data = tas.var.editor_select
-			triggerServerEvent("tas:edfCreate", localPlayer)
-			triggerServerEvent("doCreateElement", localPlayer, "vehicle", "editor_main", {position = data.p, rotation = data.r, model = data.m}, false, false)
+	
+	if key == tas.settings.editorDummyKey then -- dummy spawning
+	
+		if state then -- press
+		
+			if isMTAWindowActive() or exports["editor_main"]:getSelectedElement() then return end
+			
+			if tas.var.editor_select then
+			
+				exports["editor_main"]:setWorldClickEnabled(false) -- thanks @Sorata
+				
+				local data = tas.var.editor_select
+				tas.var.editor_dummy_client = createVehicle(411, 0, 0, 0)
+				
+				if tas.var.editor_dummy_client then
+					setElementFrozen(tas.var.editor_dummy_client, true)
+					setElementCollisionsEnabled(tas.var.editor_dummy_client, false)
+					setElementDimension(tas.var.editor_dummy_client, exports["editor_main"]:getWorkingDimension() or 200)
+					
+					setTimer(function()
+						if tas.var.editor_dummy_client ~= nil then
+							setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
+							setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
+						end
+					end, 20, 1)
+					
+					setVehicleColor(tas.var.editor_dummy_client, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255)
+					setElementAlpha(tas.var.editor_dummy_client, 180)
+				end
+				
+			end
+			
+		else -- release
+			if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- this can get bugged too under rare circumstances
+			
+				destroyElement(tas.var.editor_dummy_client)
+				local data = tas.var.editor_select
+				triggerServerEvent("tas:edfCreate", localPlayer)
+				triggerServerEvent("doCreateElement", localPlayer, "vehicle", "editor_main", {position = data.p, rotation = data.r, model = data.m}, false, false)
+			end
+			
+			-- // at least make sure our variables are correct for the next spawning
+			exports["editor_main"]:setWorldClickEnabled(true)
+			
+			tas.var.editor_dummy_client = nil
+			tas.var.editor_select = false
 		end
 	end
 end
@@ -1971,26 +2027,28 @@ end
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
 	tas.var.editor = "none"
+	if tas.var.editor_dummy_client then
+		destroyElement(tas.var.editor_dummy_client)
+	end
+	tas.var.editor_dummy_client = nil
 end)
+
 addEvent("onEditorResumed")
 addEventHandler("onEditorResumed", root, function(...)
 	setTimer(function()
 		tas.var.editor = isCursorShowing() == true and "cursor" or "freecam"
 	end, 150, 1)
 end)
+
 addEvent("onCursorMode")
 addEventHandler("onCursorMode", root, function(...)
 	tas.var.editor = "cursor"
 end)
+
 addEvent("onFreecamMode")
 addEventHandler("onFreecamMode", root, function(...)
 	tas.var.editor = "freecam"
 end)
-
-function onEditorStop()
-
-end
-addEventHandler("onClientResourceStop", root, onEditorStop)
 
 -- // Cute dxKeybind
 function tas.dxKey(keyName, x, y, x2, y2, color)
