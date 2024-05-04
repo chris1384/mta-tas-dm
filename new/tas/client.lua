@@ -364,12 +364,21 @@ addEventHandler("onClientResourceStart", resourceRoot, tas.init)
 
 -- // Termination
 function tas.stop(stoppedResource)
+
 	local resourceName = getResourceName(stoppedResource)
+	
 	if stoppedResource == resource then
 		tas.resetBinds()
 		exports["editor_main"]:setWorldClickEnabled(true)
+		
 	elseif resourceName == "editor" then
 		tas.var.editor = "none"
+
+		if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then
+			destroyElement(tas.var.editor_dummy_client)
+			tas.var.editor_dummy_client = nil
+		end
+		
 	end
 end
 addEventHandler("onClientResourceStop", root, tas.stop)
@@ -1985,9 +1994,16 @@ function tas.binds(key, state)
 				exports["editor_main"]:setWorldClickEnabled(false) -- thanks @Sorata
 				
 				local data = tas.var.editor_select
+				
+				if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- if for some reason our ghost dummy still exist (how tf would it be)
+					destroyElement(tas.var.editor_dummy_client)
+					tas.var.editor_dummy_client = nil
+				end
+				
 				tas.var.editor_dummy_client = createVehicle(411, 0, 0, 0)
 				
 				if tas.var.editor_dummy_client then
+				
 					setElementFrozen(tas.var.editor_dummy_client, true)
 					setElementCollisionsEnabled(tas.var.editor_dummy_client, false)
 					setElementDimension(tas.var.editor_dummy_client, exports["editor_main"]:getWorkingDimension() or 200)
@@ -2001,6 +2017,7 @@ function tas.binds(key, state)
 					
 					setVehicleColor(tas.var.editor_dummy_client, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255)
 					setElementAlpha(tas.var.editor_dummy_client, 180)
+					
 				end
 				
 			end
@@ -2027,10 +2044,13 @@ end
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
 	tas.var.editor = "none"
+	
 	if tas.var.editor_dummy_client then
 		destroyElement(tas.var.editor_dummy_client)
 	end
 	tas.var.editor_dummy_client = nil
+	
+	exports["editor_main"]:setWorldClickEnabled(true) -- forgor :skull:
 end)
 
 addEvent("onEditorResumed")
