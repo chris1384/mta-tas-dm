@@ -1,7 +1,7 @@
 --[[
 		* TAS - Recording Tool by chris1384 @2020
 		* version 1.4.3
---]]
+]]
 
 local tas = {
 	var = {
