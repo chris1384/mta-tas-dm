@@ -81,7 +81,7 @@ local tas = {
 			WARNING: this overrides the /debugr pathway
 		]]
 		editorRecordKey = "r", -- you know what it is
-		editorRecordMode = "new", -- how the /record command is behaving in editor. this can be: 'new' - start a new recording; 'resume' - resume from last waypoint.
+		editorRecordMode = "new", -- how the /record command is behaving in editor. this can be: 'new' - start a new recording; 'resume' - resume from last waypoint; 'none' - disable the keybind
 		editorDummyKey = "v", -- create vehicle dummy key
 		-- //
 		
@@ -421,7 +421,7 @@ function tas.commands(cmd, ...)
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
-			if not tas.var.recording and not tas.timers.warnRecord then
+			if not tas.var.recording and not tas.timers.warnRecord and not args[1] == "skipWarn" then
 				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
 				if #tas.data > 0 then
 					tas.prompt("Are you sure you want to start a $$new ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
@@ -1985,6 +1985,8 @@ function tas.binds(key, state)
 	
 	if key == tas.settings.editorDummyKey then -- dummy spawning
 	
+		if not tas.settings.enableEditorMode then return end
+	
 		if state then -- press
 		
 			if isMTAWindowActive() or exports["editor_main"]:getSelectedElement() then return end
@@ -2037,13 +2039,35 @@ function tas.binds(key, state)
 			tas.var.editor_dummy_client = nil
 			tas.var.editor_select = false
 		end
+		
+	elseif key == tas.settings.editorRecordKey then
+	
+		if not tas.settings.enableEditorMode or tas.settings.editorRecordMode == "none" then return end
+	
+		if not state then
+		
+			if isMTAWindowActive() or isCursorShowing() then return end
+			
+			if getResourceFromName("editor_main") then
+				if tas.settings.editorRecordMode == "new" then
+					executeCommandHandler(tas.registered_commands.record, "skipWarn")
+					
+				elseif tas.settings.editorRecordMode == "resume" then
+					executeCommandHandler(((tas.var.recording == true or #tas.data == 0) and tas.registered_commands.record) or tas.registered_commands.resume)
+				end
+			end
+			
+		end
+		
 	end
 end
 
 -- // Editor Events
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
-	tas.var.editor = "none"
+	if not getKeyState("f3") then -- LOL EZ FIX
+		tas.var.editor = "none"
+	end
 	
 	if tas.var.editor_dummy_client then
 		destroyElement(tas.var.editor_dummy_client)
@@ -2068,6 +2092,13 @@ end)
 addEvent("onFreecamMode")
 addEventHandler("onFreecamMode", root, function(...)
 	tas.var.editor = "freecam"
+	
+	-- // i gotta stop forgor-ing
+	if tas.var.editor_dummy_client then
+		destroyElement(tas.var.editor_dummy_client)
+	end
+	tas.var.editor_dummy_client = nil
+	
 end)
 
 -- // Cute dxKeybind
