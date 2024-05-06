@@ -2065,7 +2065,7 @@ end
 -- // Editor Events
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
-	if not getKeyState("f3") then -- LOL EZ FIX
+	if not getKeyState("f3") and not exports["editor_main"]:getSelectedElement() then -- LOL EZ FIX (PLEASE MAKE IT WORK)
 		tas.var.editor = "none"
 	end
 	
