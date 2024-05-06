@@ -429,6 +429,9 @@ function tas.commands(cmd, ...)
 			end
 		end
 		
+		if isTimer(tas.timers.warnRecord) then
+			killTimer(tas.timers.warnRecord)
+		end
 		tas.timers.warnRecord = nil
 		
 		if tas.var.recording then
