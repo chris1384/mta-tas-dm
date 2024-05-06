@@ -97,8 +97,7 @@ local tas = {
 		warpDelay = 500, -- time until the vehicle resumes from loading a warp
 		resumeDelay = 2000, -- time until the vehicle resumes from the resume command
 		
-		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results
-		keepUnrecordedWarps = true, -- keep the warps that have been saved prior to the active recording state. setting this to false can have undesired effects while gameplaying.
+		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results, but can have undesired effects while gameplaying
 		saveWarpData = true, -- save warp data to .tas files
 		-- //
 		
@@ -421,16 +420,11 @@ function tas.commands(cmd, ...)
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
 		if tas.settings.useWarnings then
-			if not tas.var.recording and not tas.timers.warnRecord and not args[1] == "skipWarn" then
+			if not tas.var.recording and not tas.timers.warnRecord then
 				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
 				if #tas.data > 0 then
 					tas.prompt("Are you sure you want to start a $$new ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
 					return 
-				elseif #tas.data < 1 and #tas.warps > 0 then
-					if not tas.settings.keepUnrecordedWarps then
-						tas.prompt("Existing warps found, are you sure you want to $$start ##recording? Use $$/record ##again to proceed.", 255, 100, 100)
-						return 
-					end
 				end
 			end
 		end
@@ -2050,7 +2044,7 @@ function tas.binds(key, state)
 			
 			if getResourceFromName("editor_main") then
 				if tas.settings.editorRecordMode == "new" then
-					executeCommandHandler(tas.registered_commands.record, "skipWarn")
+					executeCommandHandler(tas.registered_commands.record)
 					
 				elseif tas.settings.editorRecordMode == "resume" then
 					executeCommandHandler(((tas.var.recording == true or #tas.data == 0) and tas.registered_commands.record) or tas.registered_commands.resume)
