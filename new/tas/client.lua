@@ -1993,6 +1993,7 @@ function tas.binds(key, state)
 	if key == tas.settings.editorDummyKey then -- dummy spawning
 	
 		if not tas.settings.enableEditorMode then return end
+		if not getResourceFromName("editor_main") then return end
 	
 		if state then -- press
 		
@@ -2041,15 +2042,17 @@ function tas.binds(key, state)
 			end
 			
 			-- // at least make sure our variables are correct for the next spawning
-			exports["editor_main"]:setWorldClickEnabled(true)
 			
 			tas.var.editor_dummy_client = nil
 			tas.var.editor_select = false
+			
+			exports["editor_main"]:setWorldClickEnabled(true)
 		end
 		
 	elseif key == tas.settings.editorRecordKey then
 	
 		if not tas.settings.enableEditorMode or tas.settings.editorRecordMode == "none" then return end
+		if not getResourceFromName("editor_main") then return end
 	
 		if not state then
 		
