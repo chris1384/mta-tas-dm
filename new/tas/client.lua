@@ -12,6 +12,7 @@ local tas = {
 		tick_1 = 0, -- last frame tick
 		tick_2 = 0, -- next frame tick (used for interpolation)
 		play_frame = 0, -- used for table indexing
+		delta = 0, -- used for adaptiveInterpolation
 		
 		recording = false,
 		--recording_fbf = false, -- [UNUSED]
@@ -137,8 +138,8 @@ local tas = {
 		playbackInterpolation = true, -- interpolate the movement between frames for a smoother gameplay (can get jagged with framedrops)
 		playbackSpeed = 1, -- change playback speed, it's associated with 'playbackInterpolation'
 		
-		adaptiveInterpolation = false, -- [SOON] interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
-		adaptiveThreshold = 100, -- [SOON] minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
+		adaptiveInterpolation = false, -- interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
+		adaptiveThreshold = 200, -- minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
 		
 		useOnlyBinds = false, 
 		--[[ 	
@@ -339,8 +340,10 @@ function tas.init()
 			
 			if data2table.enableUserConfig == true then
 				for key,value in pairs(data2table) do
-					tas.settings[key] = value
-					config_loaded = true
+					if tas.settings[key] ~= nil then
+						tas.settings[key] = value
+						config_loaded = true
+					end
 				end
 			end
 		
@@ -368,7 +371,9 @@ function tas.stop(stoppedResource)
 	
 	if stoppedResource == resource then
 		tas.resetBinds()
-		exports["editor_main"]:setWorldClickEnabled(true)
+		if getResourceFromName("editor_main") then
+			exports["editor_main"]:setWorldClickEnabled(true)
+		end
 		
 	elseif resourceName == "editor" then
 		tas.var.editor = "none"
@@ -498,6 +503,8 @@ function tas.commands(cmd, ...)
 			if tas.settings.useHealthStates then
 				setElementHealth(vehicle, tas.data[tas.var.play_frame].h)
 			end
+			
+			tas.var.delta = tas.var.record_tick
 			
 			tas.prompt("Playbacking started!", 100, 100, 255)
 		end
@@ -1157,7 +1164,7 @@ function tas.commands(cmd, ...)
 			tas.prompt("Configurable variables list:", 255, 100, 255)
 			for k,v in pairs(tas.settings) do
 				if type(v) ~= "table" then
-					tas.prompt(tostring(k).. ": "..tostring(v), 255, 100, 255)
+					tas.prompt(tostring(k).. ": "..tostring(v).." $$("..tostring(type(v)):upper()..")", 255, 100, 255)
 				end
 			end
 			return
@@ -1168,7 +1175,7 @@ function tas.commands(cmd, ...)
 				local value_type = type(tas.settings[key])
 				
 				if value == nil then
-					tas.prompt(tostring(key).. ": "..tostring(tas.settings[key]).." (".. value_type:upper() ..")", 255, 100, 255)
+					tas.prompt(tostring(key).. ": "..tostring(tas.settings[key]).." $$(".. value_type:upper() ..")", 255, 100, 255)
 					return
 				end
 				
@@ -1181,8 +1188,9 @@ function tas.commands(cmd, ...)
 				end
 				
 				if value ~= nil then
+					local old = tas.settings[key]
 					tas.settings[key] = value
-					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value), 255, 100, 255) 
+					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value).." ##(old: $$"..tostring(old).."##)", 255, 100, 255) 
 					
 					updateUserConfig()
 					
@@ -1584,42 +1592,44 @@ function tas.render_playback()
 	local vehicle = tas.cveh(localPlayer)
 	
 	if vehicle and not isPedDead(localPlayer) then
-	
-		local current_tick = getTickCount()
-		local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed
+		
 		local inbetweening = 0
 
 		if tas.settings.playbackInterpolation then
 		
-			-- adding 'adaptiveInterpolation', i had no idea how i coded this crap
-			-- this is me literally self-explaining this part in order to understand what to do
+			local current_tick = getTickCount()
+			local time_difference = current_tick - tas.var.delta
 			
-			if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then -- if play_frame is lower than tas.data //OR// tas.data[frame] exists
+			if tas.settings.adaptiveInterpolation and time_difference >= tas.settings.adaptiveThreshold then
+				tas.var.record_tick = tas.var.record_tick + time_difference -- huh that was easy
+			end
 			
-				while real_time > tas.data[tas.var.play_frame].tick do -- while tickCount is lower than tas.data[frame].tick
+			local real_time = (current_tick - tas.var.record_tick) * tas.settings.playbackSpeed
+		
+			if tas.var.play_frame < #tas.data or tas.data[tas.var.play_frame] then
+			
+				while real_time > tas.data[tas.var.play_frame].tick do
 				
-					tas.var.tick_1 = tas.data[tas.var.play_frame].tick -- start tick = that frame tick
+					tas.var.tick_1 = tas.data[tas.var.play_frame].tick 
 					
-					if tas.data[tas.var.play_frame+2] then -- if tas.data + 2 frames exists (HOW DOES THIS WORK)
+					if tas.data[tas.var.play_frame+2] then
 					
-						tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick -- next tick = that frame+1 tick
-						tas.var.play_frame = tas.var.play_frame + 1 -- increment that frame
-					
-					-- GOES BACK TO while, checks the newly incremented value and tries again
+						tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick 
+						tas.var.play_frame = tas.var.play_frame + 1
 					else
-					-- it has passed, real_time is actually lower than that frame tick
-					
 						if tas.settings.stopPlaybackFinish then
 							executeCommandHandler(tas.registered_commands.playback)
 							return
 						end
 						
-						break -- we got 'em folks
+						break
 					end
 				end
 			end
 			
 			inbetweening = tas.clamp(0, (real_time - tas.var.tick_1) / (tas.var.tick_2 - tas.var.tick_1), 1)
+			
+			tas.var.delta = current_tick
 		else
 			local limit = #tas.data - 1
 			tas.var.play_frame = tas.var.play_frame + 1
