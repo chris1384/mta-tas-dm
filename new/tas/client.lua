@@ -149,7 +149,7 @@ local tas = {
 		playbackSpeed = 1, -- change playback speed, it's associated with 'playbackInterpolation'
 		
 		adaptiveInterpolation = false, -- interpolate the frames as usual unless there's a huge lagspike, therefore, freeze to that frame. this should be considered as experimental.
-		adaptiveThreshold = 200, -- minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
+		adaptiveThreshold = 500, -- minimum of miliseconds 'freezed' that should be considered as lagspike. 'adaptiveInterpolation' must be set to 'true' for this to work
 		
 		useOnlyBinds = false, 
 		--[[ 	
@@ -748,7 +748,7 @@ function tas.commands(cmd, ...)
 		if args[1] ~= nil then
 			seek_number = tonumber(args[1])
 			if not seek_number or not tas.data[seek_number] or seek_number < 1 or seek_number > #tas.data - 1 then
-				tas.prompt("Seeking failed, $$nonexistent ##record frame!", 255, 100, 100) 
+				tas.prompt("Seeking failed, $$non-existent ##record frame!", 255, 100, 100) 
 				return
 			end
 		end
@@ -757,6 +757,8 @@ function tas.commands(cmd, ...)
 		tas.var.tick_1 = tas.data[tas.var.play_frame].tick
 		tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
 		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick / tas.settings.playbackSpeed)
+		
+		tas.var.delta = tas.var.record_tick -- fml
 		
 		if tas.settings.useOnlyBinds then
 			setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
