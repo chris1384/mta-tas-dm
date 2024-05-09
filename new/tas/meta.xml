@@ -3,6 +3,7 @@
     <min_mta_version client="1.5.5-9.14060" server="1.5.5-9.14060"></min_mta_version>
     <script src="client.lua" type="client" cache="false" />
     <script src="server.lua" type="server" />
+    <script src="updater.lua" type="server" />
 
     <export function="getTASData" type="client"/>
 </meta>
