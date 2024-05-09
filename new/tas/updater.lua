@@ -152,7 +152,7 @@ function processFiles(data2save)
 			
 				outputDebugString("[SERVER-TAS]: Auto-updater has finished. Modified "..tostring(#filesModified).." files.", 4, 100, 255, 100)
 				outputDebugString("[SERVER-TAS]: Update title: '"..string.gsub(commitData[1].commit.message, "\n\n", " // ").."'", 4, 100, 255, 100)
-				outputChatBox("[SERVER-TAS] #FFFFFFThe resource has been updated! Title: '"..string.gsub(commitData[1].commit.message, "\n\n", " - ").."'", root, 255, 100, 255)
+				outputChatBox("[SERVER-TAS] #FFFFFFThe resource has been updated! Title: #FF64FF'"..string.gsub(commitData[1].commit.message, "\n\n", " - ").."'", root, 255, 100, 255, true)
 				
 			end
 			
