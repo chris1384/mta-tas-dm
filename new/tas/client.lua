@@ -75,15 +75,25 @@ local tas = {
 		abortOnInvalidity = false, -- prevent TAS from loading any more lines (when using /loadr) if it finds an invalid one. you can end up with only half of the recording loaded, so keep this to false.
 		
 		hunterFinish = false, -- stop recording/playbacking as soon as the player has reached the hunter (model change detection). setting this to true can have undesired effects while gameplaying.
+		-- //
 		
+		
+		-- // Editor
 		enableEditorMode = true, --[[
-			use TAS as an alternative to MRT (to create vehicle dummy on waypoints). 
-			this also binds the record/resume command to 'R' key like MRT.
+			use TAS as an editor tool to create MRT dummy vehicles or create slowbug fixes
+			this also enables the record command to be bounded onto a key (default is 'R') as you would use MRT. this gets disabled when editor stops.
+			disabling this also disables all of the editor features listed below.
 			WARNING: this overrides the /debugr pathway
 		]]
+		
 		editorRecordKey = "r", -- you know what it is
-		editorRecordMode = "new", -- how the /record command is behaving in editor. this can be: 'new' - start a new recording; 'resume' - resume from last waypoint; 'none' - disable the keybind
+		editorRecordMode = "new", -- how the bounded key should behave. this can be: 'new' - start a new recording; 'resume' - resume the recording from last waypoint; 'none' - disable the keybind
+		
+		editorEnableDummy = true, -- enable the creation of MRT dummies
 		editorDummyKey = "v", -- create vehicle dummy key
+		
+		editorEnableSlowbug = true, -- enable the creation of slowbug fix scripts
+		editorSlowbugKey = "b", -- key to output a slowbug fixer script from the waypoint and copy to clipboard
 		-- //
 		
 		
@@ -1237,6 +1247,132 @@ function tas.commands(cmd, ...)
 	end
 end
 
+
+-- // Binds
+function tas.binds(key, state)
+	
+	-- // RECORD
+	if key == tas.settings.editorRecordKey then
+	
+		if not tas.settings.enableEditorMode or tas.settings.editorRecordMode == "none" then return end
+		if not getResourceFromName("editor_main") then return end
+	
+		if not state then
+		
+			if isMTAWindowActive() or isCursorShowing() then return end
+			
+			if tas.settings.editorRecordMode == "new" then
+				executeCommandHandler(tas.registered_commands.record)
+				
+			elseif tas.settings.editorRecordMode == "resume" then
+				executeCommandHandler(((tas.var.recording == true or #tas.data == 0) and tas.registered_commands.record) or tas.registered_commands.resume)
+			end
+			
+		end
+		
+	-- // DUMMY
+	elseif key == tas.settings.editorDummyKey then
+	
+		if not tas.settings.enableEditorMode then return end
+		if not tas.settings.editorEnableDummy then return end
+		if not getResourceFromName("editor_main") then return end
+	
+		if state then
+		
+			if isMTAWindowActive() or exports["editor_main"]:getSelectedElement() then return end
+			
+			if tas.var.editor_select then
+			
+				exports["editor_main"]:setWorldClickEnabled(false) -- thanks @Sorata
+				
+				local data = tas.var.editor_select
+				
+				if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- if for some reason our ghost dummy still exist (how tf would it be)
+					destroyElement(tas.var.editor_dummy_client)
+					tas.var.editor_dummy_client = nil
+				end
+				
+				tas.var.editor_dummy_client = createVehicle(411, 0, 0, 0)
+				
+				if tas.var.editor_dummy_client then
+				
+					setElementFrozen(tas.var.editor_dummy_client, true)
+					setElementCollisionsEnabled(tas.var.editor_dummy_client, false)
+					setElementDimension(tas.var.editor_dummy_client, exports["editor_main"]:getWorkingDimension() or 200)
+					
+					setTimer(function()
+						if tas.var.editor_dummy_client ~= nil then
+							setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
+							setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
+						end
+					end, 20, 1)
+					
+					setVehicleColor(tas.var.editor_dummy_client, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255)
+					setElementAlpha(tas.var.editor_dummy_client, 180)
+					
+				end
+				
+			end
+			
+		else
+			if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- this can get bugged too under rare circumstances
+			
+				destroyElement(tas.var.editor_dummy_client)
+				local data = tas.var.editor_select
+				triggerServerEvent("tas:edfCreate", localPlayer)
+				triggerServerEvent("doCreateElement", localPlayer, "vehicle", "editor_main", {position = data.p, rotation = data.r, model = data.m}, false, false)
+			end
+			
+			-- // at least make sure our variables are correct for the next spawning
+			
+			tas.var.editor_dummy_client = nil
+			tas.var.editor_select = false
+			
+			exports["editor_main"]:setWorldClickEnabled(true)
+		end
+		
+	-- // SLOWBUG
+	elseif key == tas.settings.editorSlowbugKey then
+	
+		if not tas.settings.enableEditorMode then return end
+		if not tas.settings.editorEnableSlowbug then return end
+		if not getResourceFromName("editor_main") then return end
+	
+		if not state then
+		
+			if isMTAWindowActive() then return end
+			
+			if tas.var.editor_select then
+				
+				local data = tas.var.editor_select
+				local pos = string_format("%s, %s, %s", data.p[1], data.p[2], data.p[3])
+				local rot = string_format("%s, %s, %s", data.r[1], data.r[2], data.r[3])
+				local vel = string_format("%s, %s, %s", data.v[1], data.v[2], data.v[3])
+				local rvel = string_format("%s, %s, %s", data.rv[1], data.rv[2], data.rv[3])
+				
+				local script = [[
+addEventHandler("onClientMarkerHit", createMarker(]] .. pos .. [[, "corona", 3, 0, 13, 84, 0), function(e, d)
+	if e == localPlayer and d then
+		local v = getPedOccupiedVehicle(e)
+		if v and getVehicleController(v) == e then
+			setElementPosition(v, ]] .. pos .. [[)
+			setElementRotation(v, ]] .. rot .. [[)
+			setElementVelocity(v, ]] .. vel .. [[)
+			setElementAngularVelocity(v, ]] .. rvel .. [[0)
+		end
+	end
+end)]] -- you can't do better than this
+
+				setClipboard(script)
+				tas.prompt("The slowfix script has been $$copied ##to your $$clipboard##!")
+				
+			end
+			
+		end
+		
+	end
+end
+
 -- // Recording
 function tas.render_record(deltaTime)
 
@@ -1863,18 +1999,27 @@ function tas.pathWay()
 			end
 			if foundWaypoint then
 				tas.var.editor_select = foundWaypoint
-				local dummyKeyText = "Press #FF6464'"..tas.settings.editorDummyKey:upper().."' #FFFFFFto spawn dummy"
-				dxDrawText(string_gsub(dummyKeyText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + 1, cursorX + 30 + 1, cursorY + 40 + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
-				dxDrawText(dummyKeyText, cursorX - 10, cursorY + 30, cursorX + 30, cursorY + 40, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
-				if tas.var.editor_dummy_client then
-					local data = tas.var.editor_select
-					
-					-- // smoother preview but can get buggy due to inconsistent cursor detection
-					--local x, y, z = getElementPosition(tas.var.editor_dummy_client)
-					--setElementPosition(tas.var.editor_dummy_client, tas.lerp(x, data.p[1], 0.25), tas.lerp(y, data.p[2], 0.25), tas.lerp(z, data.p[3], 0.25))
-					
-					setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
-					setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
+				local text_offset = 0
+				if tas.settings.editorEnableDummy then
+					local dummyKeyText = "Press #FF6464'"..tas.settings.editorDummyKey:upper().."' #FFFFFFto spawn dummy"
+					dxDrawText(string_gsub(dummyKeyText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + 1, cursorX + 30 + 1, cursorY + 40 + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
+					dxDrawText(dummyKeyText, cursorX - 10, cursorY + 30, cursorX + 30, cursorY + 40, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
+					text_offset = 14
+					if tas.var.editor_dummy_client then
+						local data = tas.var.editor_select
+						
+						-- // smoother preview but can get buggy due to inconsistent cursor detection
+						--local x, y, z = getElementPosition(tas.var.editor_dummy_client)
+						--setElementPosition(tas.var.editor_dummy_client, tas.lerp(x, data.p[1], 0.25), tas.lerp(y, data.p[2], 0.25), tas.lerp(z, data.p[3], 0.25))
+						
+						setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
+						setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
+					end
+				end
+				if tas.settings.editorEnableSlowbug then
+					local slowBugText = "Press #FF6464'"..tas.settings.editorSlowbugKey:upper().."' #FFFFFFto copy script"
+					dxDrawText(string_gsub(slowBugText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + text_offset + 1, cursorX + 30 + 1, cursorY + 40 + text_offset + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
+					dxDrawText(slowBugText, cursorX - 10, cursorY + 30 + text_offset, cursorX + 30, cursorY + 40 + text_offset, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
 				end
 			else
 				if not tas.var.editor_dummy_client then
@@ -1985,91 +2130,6 @@ function tas.pathWay()
 		end
 	end
 	
-end
-
--- // Binds
-function tas.binds(key, state)
-	
-	if key == tas.settings.editorDummyKey then -- dummy spawning
-	
-		if not tas.settings.enableEditorMode then return end
-		if not getResourceFromName("editor_main") then return end
-	
-		if state then -- press
-		
-			if isMTAWindowActive() or exports["editor_main"]:getSelectedElement() then return end
-			
-			if tas.var.editor_select then
-			
-				exports["editor_main"]:setWorldClickEnabled(false) -- thanks @Sorata
-				
-				local data = tas.var.editor_select
-				
-				if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- if for some reason our ghost dummy still exist (how tf would it be)
-					destroyElement(tas.var.editor_dummy_client)
-					tas.var.editor_dummy_client = nil
-				end
-				
-				tas.var.editor_dummy_client = createVehicle(411, 0, 0, 0)
-				
-				if tas.var.editor_dummy_client then
-				
-					setElementFrozen(tas.var.editor_dummy_client, true)
-					setElementCollisionsEnabled(tas.var.editor_dummy_client, false)
-					setElementDimension(tas.var.editor_dummy_client, exports["editor_main"]:getWorkingDimension() or 200)
-					
-					setTimer(function()
-						if tas.var.editor_dummy_client ~= nil then
-							setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
-							setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
-						end
-					end, 20, 1)
-					
-					setVehicleColor(tas.var.editor_dummy_client, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255)
-					setElementAlpha(tas.var.editor_dummy_client, 180)
-					
-				end
-				
-			end
-			
-		else -- release
-			if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then -- this can get bugged too under rare circumstances
-			
-				destroyElement(tas.var.editor_dummy_client)
-				local data = tas.var.editor_select
-				triggerServerEvent("tas:edfCreate", localPlayer)
-				triggerServerEvent("doCreateElement", localPlayer, "vehicle", "editor_main", {position = data.p, rotation = data.r, model = data.m}, false, false)
-			end
-			
-			-- // at least make sure our variables are correct for the next spawning
-			
-			tas.var.editor_dummy_client = nil
-			tas.var.editor_select = false
-			
-			exports["editor_main"]:setWorldClickEnabled(true)
-		end
-		
-	elseif key == tas.settings.editorRecordKey then
-	
-		if not tas.settings.enableEditorMode or tas.settings.editorRecordMode == "none" then return end
-		if not getResourceFromName("editor_main") then return end
-	
-		if not state then
-		
-			if isMTAWindowActive() or isCursorShowing() then return end
-			
-			if getResourceFromName("editor_main") then
-				if tas.settings.editorRecordMode == "new" then
-					executeCommandHandler(tas.registered_commands.record)
-					
-				elseif tas.settings.editorRecordMode == "resume" then
-					executeCommandHandler(((tas.var.recording == true or #tas.data == 0) and tas.registered_commands.record) or tas.registered_commands.resume)
-				end
-			end
-			
-		end
-		
-	end
 end
 
 -- // Editor Events
