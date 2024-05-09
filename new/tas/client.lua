@@ -758,7 +758,7 @@ function tas.commands(cmd, ...)
 		tas.var.tick_2 = tas.data[tas.var.play_frame+1].tick
 		tas.var.record_tick = getTickCount() - (tas.data[seek_number].tick / tas.settings.playbackSpeed)
 		
-		tas.var.delta = tas.var.record_tick -- fml
+		tas.var.delta = getTickCount() -- fml
 		
 		if tas.settings.useOnlyBinds then
 			setElementPosition(vehicle, unpack(tas.data[tas.var.play_frame].p))
