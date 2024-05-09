@@ -1,4 +1,9 @@
-local autoUpdate = true
+--[[
+		* TAS - Recording Tool by chris1384 @2020
+		* version 1.4.3
+]]
+
+local autoUpdate = true -- // make TAS auto-update itself, set this to false or delete this file to remove the auto-update feature
 
 local filesFetched = 0
 local remoteFiles = {}
@@ -8,28 +13,9 @@ addEventHandler("onResourceStart", resourceRoot, function()
 	setTimer(queueGitRepo, 24*60*60*1000, 0) -- 24 hours
 end)
 
-function saveDirectoryData(data)
-	if fileExists("addons/autoupdater.json") then fileDelete("addons/autoupdater.json") end
-	local file = fileCreate("addons/autoupdater.json")
-	if file then
-		fileWrite(file, data)
-		fileClose(file)
-		return true
-	end
-	return false
-end
+function queueGitRepo() -- starting sequence
 
-function loadDirectoryData()
-	local returnedData
-	local file = fileExists("addons/autoupdater.json") == true and fileOpen("addons/autoupdater.json") or nil
-	if file then
-		returnedData = fileRead(file, fileGetSize(file))
-		fileClose(file)
-	end
-	return returnedData
-end
-
-function queueGitRepo()
+	if not autoUpdate then return end
 
 	filesFetched = 0
 	remoteFiles = {}
@@ -152,7 +138,13 @@ function processFiles(data2save)
 			
 				outputDebugString("[SERVER-TAS]: Auto-updater has finished. Modified "..tostring(#filesModified).." files.", 4, 100, 255, 100)
 				outputDebugString("[SERVER-TAS]: Update title: '"..string.gsub(commitData[1].commit.message, "\n\n", " // ").."'", 4, 100, 255, 100)
-				outputChatBox("[SERVER-TAS] #FFFFFFThe resource has been updated! Title: #FF64FF'"..string.gsub(commitData[1].commit.message, "\n\n", " - ").."'", root, 255, 100, 255, true)
+				outputChatBox("[SERVER-TAS] #FFFFFFThe resource has been updated! Title: #FF64FF'"..string.gsub(commitData[1].commit.message, "\n\n", " #FFFFFF- #FF64FF").."'", root, 255, 100, 255, true)
+				
+				if hasObjectPermissionTo(resource, "function.restartResource") then 
+					restartResource(resource)
+				else
+					outputDebugString("[SERVER-TAS]: Resource was not able to restart itself, please restart it to apply updates.", 0, 255, 100, 100) 
+				end
 				
 			end
 			
@@ -161,4 +153,25 @@ function processFiles(data2save)
 		outputDebugString("[SERVER-TAS]: Auto-updater has finished. No updates.", 4, 100, 255, 100)
 	end
 	
+end
+
+function saveDirectoryData(data)
+	if fileExists("addons/autoupdater.json") then fileDelete("addons/autoupdater.json") end
+	local file = fileCreate("addons/autoupdater.json")
+	if file then
+		fileWrite(file, data)
+		fileClose(file)
+		return true
+	end
+	return false
+end
+
+function loadDirectoryData()
+	local returnedData
+	local file = fileExists("addons/autoupdater.json") == true and fileOpen("addons/autoupdater.json") or nil
+	if file then
+		returnedData = fileRead(file, fileGetSize(file))
+		fileClose(file)
+	end
+	return returnedData
 end
