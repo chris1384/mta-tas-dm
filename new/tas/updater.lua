@@ -15,35 +15,39 @@ end)
 
 function queueGitRepo() -- starting sequence
 
-	if not autoUpdate then return end
-
 	filesFetched = 0
 	remoteFiles = {}
 	
-	if not hasObjectPermissionTo(resource, "function.fetchRemote") then outputDebugString("[SERVER-TAS]: Resource is not allowed to fetch GitHub updates using 'fetchRemote', please add it to 'Admin' group.", 0, 255, 100, 100) return end
+	if not autoUpdate then return end
 	
-		fetchRemote("https://api.github.com/repos/chris1384/mta-tas-dm/contents/new/tas?ref=master", function(response, err)
+	if not hasObjectPermissionTo(resource, "function.fetchRemote") then 
+		outputDebugString("[SERVER-TAS]: Resource is not allowed to fetch GitHub updates using 'fetchRemote', please add it to 'Admin' group.", 0, 255, 100, 100) 
+		return 
+	end
 	
-			if response == "ERROR" then
-				outputDebugString("[SERVER-TAS]: Resource failed to fetch for updates, returned "..tostring(response).." with code: "..tostring(err), 0, 255, 100, 100)
-			else
-				outputDebugString("[SERVER-TAS]: Checking for updates..", 4, 255, 255, 100)
+	fetchRemote("https://api.github.com/repos/chris1384/mta-tas-dm/contents/new/tas?ref=master", function(response, err)
+	
+		if response == "ERROR" then
+			outputDebugString("[SERVER-TAS]: Resource failed to fetch for updates, returned "..tostring(response).." with code: "..tostring(err), 0, 255, 100, 100)
+			return
+		else
+			outputDebugString("[SERVER-TAS]: Checking for updates..", 4, 255, 255, 100)
+		end
+		
+		local response = {fromJSON(response)}
+		local dataToSave = {}
+	
+		for k, v in ipairs(response) do
+			if v.download_url then
+				remoteFiles[v.name] = {url = v.download_url, sha = v.sha}
+				dataToSave[v.name] = {sha = v.sha}
+				filesFetched = filesFetched + 1
 			end
-			
-			local response = {fromJSON(response)}
-			local dataToSave = {}
-	
-			for k, v in ipairs(response) do
-				if v.download_url then
-					remoteFiles[v.name] = {url = v.download_url, sha = v.sha}
-					dataToSave[v.name] = {sha = v.sha}
-					filesFetched = filesFetched + 1
-				end
-			end
-			
-			setTimer(function(dataLoL) downloadRepoFiles(dataLoL) downloadTimer = nil end, 1000, 1, dataToSave, response)
-			
-		end)
+		end
+		
+		setTimer(function(dataLoL) downloadRepoFiles(dataLoL) downloadTimer = nil end, 1000, 1, dataToSave, response)
+		
+	end)
 	
 end
 
@@ -71,11 +75,10 @@ end
 function processFiles(data2save)
 	
 	local filesModified = {}
-	local resourceData = loadDirectoryData()
+	local resourceData = loadDirectoryData() or ""
+	local unformattedData = fromJSON(resourceData)
 	
-	if resourceData then
-		
-		local unformattedData = fromJSON(resourceData)
+	if resourceData and unformattedData and type(unformattedData) == "table" then
 		
 		for fileName,remoteData in pairs(remoteFiles) do
 		
