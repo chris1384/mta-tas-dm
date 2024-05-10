@@ -86,8 +86,13 @@ function processFiles(data2save)
 				unformattedData[fileName].sha = unformattedData[fileName].sha:upper()
 				if remoteData.sha ~= unformattedData[fileName].sha then
 				
-					if fileExists("addons/backups/"..fileName..".bak") then fileDelete("addons/backups/"..fileName..".bak") end
-					fileRename(fileName, "addons/backups/"..fileName..".bak")
+					if fileExists("addons/backups/"..fileName..".bak") then 
+						fileDelete("addons/backups/"..fileName..".bak") 
+					end
+					
+					if fileExists(fileName) then 
+						fileRename(fileName, "addons/backups/"..fileName..".bak")
+					end
 					
 					local file = fileCreate(fileName)
 					if file then	
@@ -113,9 +118,14 @@ function processFiles(data2save)
 	else
 	
 		for fileName,remoteData in pairs(remoteFiles) do
-				
-			if fileExists("addons/backups/"..fileName..".bak") then fileDelete("addons/backups/"..fileName..".bak") end
-			fileRename(fileName, "addons/backups/"..fileName..".bak")
+		
+			if fileExists("addons/backups/"..fileName..".bak") then 
+				fileDelete("addons/backups/"..fileName..".bak") 
+			end
+			
+			if fileExists(fileName) then 
+				fileRename(fileName, "addons/backups/"..fileName..".bak")
+			end
 			
 			local file = fileCreate(fileName)
 			if file then	
@@ -136,8 +146,8 @@ function processFiles(data2save)
 			
 			if commitData then
 			
-				outputDebugString("[SERVER-TAS]: Auto-updater has finished. Modified "..tostring(#filesModified).." files.", 4, 100, 255, 100)
-				outputDebugString("[SERVER-TAS]: Update title: '"..string.gsub(commitData[1].commit.message, "\n\n", " // ").."'", 4, 100, 255, 100)
+				outputDebugString("[SERVER-TAS]: Auto-updater has finished. Modified ["..table.concat(filesModified, ", ").."] "..tostring(#filesModified).." files.", 4, 100, 255, 100)
+				outputDebugString("[SERVER-TAS]: Update title: '"..string.gsub(commitData[1].commit.message, "\n\n", " - ").."'", 4, 100, 255, 100)
 				outputChatBox("[SERVER-TAS] #FFFFFFThe resource has been updated! Title: #FF64FF'"..string.gsub(commitData[1].commit.message, "\n\n", " #FFFFFF- #FF64FF").."'", root, 255, 100, 255, true)
 				
 				if hasObjectPermissionTo(resource, "function.restartResource") then 
