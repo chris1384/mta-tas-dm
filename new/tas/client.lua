@@ -1993,6 +1993,7 @@ function tas.pathWay()
 								local detectionHeight = tas.var.editor_dummy_client ~= nil and 5 or 1 -- this can be helpful but annoying
 								if isMouseInPosition(sX-(10*detectionWidth), sY-(20*detectionHeight), 20*detectionWidth, 40*detectionHeight) then
 									foundWaypoint = tas.data[i]
+									foundWaypoint.frame = i
 								end
 							end
 						end
