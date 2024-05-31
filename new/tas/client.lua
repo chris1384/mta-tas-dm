@@ -1294,7 +1294,7 @@ function tas.binds(key, state)
 					tas.var.editor_dummy_client = nil
 				end
 				
-				tas.var.editor_dummy_client = createVehicle(411, 0, 0, 0)
+				tas.var.editor_dummy_client = createVehicle(data.m, 0, 0, 0)
 				
 				if tas.var.editor_dummy_client then
 				
@@ -1331,45 +1331,6 @@ function tas.binds(key, state)
 			tas.var.editor_select = false
 			
 			exports["editor_main"]:setWorldClickEnabled(true)
-		end
-		
-	-- // SLOWBUG
-	elseif key == tas.settings.editorSlowbugKey then
-	
-		if not tas.settings.enableEditorMode then return end
-		if not tas.settings.editorEnableSlowbug then return end
-		if not getResourceFromName("editor_main") then return end
-	
-		if not state then
-		
-			if isMTAWindowActive() then return end
-			
-			if tas.var.editor_select then
-				
-				local data = tas.var.editor_select
-				local pos = string_format("%s, %s, %s", data.p[1], data.p[2], data.p[3])
-				local rot = string_format("%s, %s, %s", data.r[1], data.r[2], data.r[3])
-				local vel = string_format("%s, %s, %s", data.v[1], data.v[2], data.v[3])
-				local rvel = string_format("%s, %s, %s", data.rv[1], data.rv[2], data.rv[3])
-				
-				local script = [[
-addEventHandler("onClientMarkerHit", createMarker(]] .. pos .. [[, "corona", 3, 0, 13, 84, 0), function(e, d)
-	if e == localPlayer and d then
-		local v = getPedOccupiedVehicle(e)
-		if v and getVehicleController(v) == e then
-			setElementPosition(v, ]] .. pos .. [[)
-			setElementRotation(v, ]] .. rot .. [[)
-			setElementVelocity(v, ]] .. vel .. [[)
-			setElementAngularVelocity(v, ]] .. rvel .. [[0)
-		end
-	end
-end)]] -- you can't do better than this
-
-				setClipboard(script)
-				tas.prompt("The slowfix script has been $$copied ##to your $$clipboard##!")
-				
-			end
-			
 		end
 		
 	end
@@ -2018,11 +1979,6 @@ function tas.pathWay()
 						setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
 						setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
 					end
-				end
-				if tas.settings.editorEnableSlowbug then
-					local slowBugText = "Press #FF6464'"..tas.settings.editorSlowbugKey:upper().."' #FFFFFFto copy script"
-					dxDrawText(string_gsub(slowBugText, "#%x%x%x%x%x%x", ""), cursorX - 10 + 1, cursorY + 30 + text_offset + 1, cursorX + 30 + 1, cursorY + 40 + text_offset + 1, 0xFF000000, 1, "default", "center", "top", false, false, false, true)
-					dxDrawText(slowBugText, cursorX - 10, cursorY + 30 + text_offset, cursorX + 30, cursorY + 40 + text_offset, 0xFFFFFFFF, 1, "default", "center", "top", false, false, false, true)
 				end
 			else
 				if not tas.var.editor_dummy_client then
