@@ -75,9 +75,8 @@ addEventHandler("onClientResourceStart", resourceRoot, function()
 	end
 
 	prompt("")
-	prompt("Press $$'M' ##to create a marker on a $$TAS ##waypoint in $$Editor##.")
+	prompt("Press $$'"..selectionKey:upper().."' ##to create a marker on a $$TAS ##waypoint in $$Editor##.")
 	prompt("Do $$/antisc ##to switch between $$'rotation'##, $$'anti-fw' ##or $$'anti-bw' ##anti-scs. You need to create another marker to apply.")
-	--prompt("Do $$/antisc ##to switch between $$'rotation' ##or $$'anti-bw' ##anti-scs. Current mode is: $$'"..antiScType.."'")
 	prompt("To edit precision of rotation anti-sc, use $$/precision [nr]")
 	prompt("Lower values mean $$stricter ##rotation precision. Default is $$"..tostring(rotation_precision).."##.")
 	prompt("Have fun legend! $$<3 ##- #FFAAFFchris1384")
@@ -303,16 +302,7 @@ function clickEvents(key, state)
 end
 addEventHandler("onClientKey", root, clickEvents)
 
--- unused
---[[
-addEventHandler("onClientRender", root, function()
-	if selector and type(selector) == "table" then
-		local x, y, z = unpack(selector.p)
-		dxDrawLine3D(x, y, z-5, x, y, z+5, 0xFFFF6464, 20)
-	end
-end)
-]]
-
+-- // Anti-Fw useful script
 function isBackwards(vehicle)
 	local m = getElementMatrix(vehicle)
 	local x, y, z = getElementVelocity(vehicle)
