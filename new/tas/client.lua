@@ -91,9 +91,6 @@ local tas = {
 		
 		editorEnableDummy = true, -- enable the creation of MRT dummies
 		editorDummyKey = "v", -- create vehicle dummy key
-		
-		editorEnableSlowbug = true, -- enable the creation of slowbug fix scripts
-		editorSlowbugKey = "b", -- key to output a slowbug fixer script from the waypoint and copy to clipboard
 		-- //
 		
 		
@@ -182,6 +179,7 @@ local tas = {
 			offsetX = 0, -- offset for hud
 			
 			frameSkipping = 15, -- optimize the pathway when you're not playbacking
+			frameSkippingFreecam = 5, -- same as above but make it more precise on editor freecam mode
 			wholeFrameClipDistance = 200, -- farClipDistance for full frames, so it won't display everything.
 			
 			warpsRenderLevel = 3, -- at which debug-level should warps start rendering (text and marker)
@@ -385,9 +383,10 @@ function tas.stop(stoppedResource)
 			exports["editor_main"]:setWorldClickEnabled(true)
 		end
 		
-	elseif resourceName == "editor" then
+	elseif resourceName == "editor_main" then
 		tas.var.editor = "none"
-
+		tas.settings.debugging.frameSkipping = 15 -- default, it should be, right?
+		
 		if tas.var.editor_dummy_client and isElement(tas.var.editor_dummy_client) then
 			destroyElement(tas.var.editor_dummy_client)
 			tas.var.editor_dummy_client = nil
@@ -434,7 +433,7 @@ function tas.commands(cmd, ...)
 		if tas.timers.saving_timer then tas.prompt("Recording failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
-		if tas.settings.useWarnings then
+		if tas.settings.useWarnings and not tas.settings.enableEditorMode then
 			if not tas.var.recording and not tas.timers.warnRecord then
 				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
 				if #tas.data > 0 then
@@ -572,22 +571,24 @@ function tas.commands(cmd, ...)
 		local w_data = tas.warps[warp_number]
 		
 		if tas.var.recording then
-			if not w_data.tick or not w_data.frame then
-				tas.prompt("Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) return
-			end
-			
-			removeEventHandler("onClientPreRender", root, tas.render_record)
-			
-			if w_data.tick <= tas.data[#tas.data].tick then
-				for i=w_data.frame + 1, #tas.data do -- flawless
-					tas.data[i] = nil
+			if not tas.settings.enableEditorMode then
+				if not w_data.tick or not w_data.frame then
+					tas.prompt("Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) 
+					return
 				end
-			else
-				tas.var.recording = false
-				tas.prompt("Critical error, warp tick is $$bigger ##than last frame tick!", 255, 100, 100)
-				tas.prompt("Recording stopped for safety, use $$/"..tas.registered_commands.resume.." ##to properly continue your run!", 255, 100, 100) 
-				tas.prompt("Save: "..tostring(w_data.tick).." | Last: "..tostring(tas.data[#tas.data].tick), 255, 100, 100)  
+				
+				if w_data.tick <= tas.data[#tas.data].tick then
+					for i=w_data.frame + 1, #tas.data do -- flawless
+						tas.data[i] = nil
+					end
+				else
+					tas.var.recording = false
+					tas.prompt("Critical error, warp tick is $$bigger ##than last frame tick!", 255, 100, 100)
+					tas.prompt("Recording stopped for safety, use $$/"..tas.registered_commands.resume.." ##to properly continue your run!", 255, 100, 100) 
+					tas.prompt("Save: "..tostring(w_data.tick).." | Last: "..tostring(tas.data[#tas.data].tick), 255, 100, 100)  
+				end
 			end
+			removeEventHandler("onClientPreRender", root, tas.render_record)
 		end
 		
 		setElementPosition(vehicle, unpack(w_data.p))
@@ -608,7 +609,7 @@ function tas.commands(cmd, ...)
 			killTimer(tas.timers.load_warp) 
 			tas.timers.load_warp = nil 
 		end
-		
+		 
 		local load_startTick = getTickCount()
 		local fps_to_ms = math_ceil(1000 / tas.var.fps)
 		
@@ -630,8 +631,10 @@ function tas.commands(cmd, ...)
 			tas.nos(vehicle, w_data.n)
 			
 			if tas.var.recording then
-				tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms * tas.var.gamespeed
-				tas.var.record_tick = getTickCount() - w_data.tick
+				if not tas.settings.enableEditorMode then
+					tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms * tas.var.gamespeed
+					tas.var.record_tick = getTickCount() - w_data.tick
+				end
 				addEventHandler("onClientPreRender", root, tas.render_record, true, "high+10")
 			end
 			
@@ -663,6 +666,7 @@ function tas.commands(cmd, ...)
 		if tas.timers.saving_timer then tas.prompt("Resuming failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Resuming failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Resuming failed, stop $$playbacking ##first!", 255, 100, 100) return end
+		
 		if tas.var.fps ~= nil then
 			if getFPSLimit() ~= tas.var.fps then 
 				tas.prompt("Resuming failed, recorded FPS was $$"..tostring(tas.var.fps).."##!", 255, 100, 100) 
@@ -1592,17 +1596,21 @@ function tas.record_state(vehicle)
 		end
 		
 		local analog = nil
+		
 		if tas.settings.enableAnalog and tas.settings.useAnalogWrapper then
 			if not analog then analog = {left = 0, right = 0} end
 			analog.left = math_abs(math_min(0, tas.var.analog_direction))
 			analog.right = math_abs(math_max(0, tas.var.analog_direction))
 		else
+		
 			local anl = getPedAnalogControlState(localPlayer, "vehicle_left", true)
 			local anr = getPedAnalogControlState(localPlayer, "vehicle_right", true)
+			
 			if anl ~= 0 and anl ~= 1 then
 				if not analog then analog = {left = 0, right = 0} end
 				analog.left = anl
 			end
+			
 			if anr ~= 0 and anl ~= 1 then
 				if not analog then analog = {left = 0, right = 0} end
 				analog.right = anr
@@ -1641,12 +1649,14 @@ function tas.analogControl()
 		local rights = getBoundKeys("vehicle_right")
 		local left_press = false
 		local right_press = false
+		
 		for k,v in pairs(lefts) do
 			if getKeyState(k) then
 				left_press = true
 				break
 			end
 		end
+		
 		for k,v in pairs(rights) do
 			if getKeyState(k) then
 				right_press = true
@@ -1656,14 +1666,18 @@ function tas.analogControl()
 		
 		if left_press and right_press then
 			tas.var.analog_direction = 0
+			
 		elseif left_press then
 			if tas.var.analog_direction > 0 then tas.var.analog_direction = 0 end
 			tas.var.analog_direction = math_max(-1, tas.var.analog_direction - tas.settings.analogSensitivity)
+			
 		elseif right_press then
 			if tas.var.analog_direction < 0 then tas.var.analog_direction = 0 end
 			tas.var.analog_direction = math_min(1, tas.var.analog_direction + tas.settings.analogSensitivity)
+			
 		elseif tas.var.analog_direction ~= 0 and not (right_press or left_press) then
 			if tas.var.analog_direction == 0 then
+				-- lol
 			elseif tas.var.analog_direction > 0 then
 				tas.var.analog_direction = math_max(0, tas.var.analog_direction - tas.settings.analogSensitivity * 1.333)
 			else
@@ -1674,8 +1688,10 @@ function tas.analogControl()
 		if tas.var.analog_direction == 0 then
 			setAnalogControlState("vehicle_right", 0, false)
 			setAnalogControlState("vehicle_left", 0, false)
+			
 		elseif tas.var.analog_direction > 0 then
 			setAnalogControlState("vehicle_right", tas.var.analog_direction, true)
+			
 		else
 			setAnalogControlState("vehicle_left", -tas.var.analog_direction, true)
 		end
@@ -1920,6 +1936,8 @@ end
 
 function tas.pathWay()
 
+	local distanceThreshold = 120
+
 	if tas.settings.enableEditorMode and tas.var.editor ~= "none" then
 
 		local cursorX, cursorY
@@ -1937,14 +1955,19 @@ function tas.pathWay()
 		local pX, pY, pZ = getElementPosition(localPlayer)
 		
 		if tas.var.editor == "cursor" then
+		
 			local foundWaypoint = false
+			
 			for i = 1, #tas.data - 1 do
 				local x, y, z = unpack(tas.data[i].p)
 				if not tas.settings.debugging.wholeFrameClipDistance or (tas.settings.debugging.wholeFrameClipDistance and tas.dist3D(pX, pY, pZ, x, y, z) < tas.settings.debugging.wholeFrameClipDistance) then
 					local x2, y2, z2 = unpack(tas.data[i + 1].p)
+					local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
 					--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
-					dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 10)
-					dxDrawLine3D(x, y, z+0.15, x, y, z-0.15, 0xFFFFFFFF, 5)
+					if distanceBetween < distanceThreshold then
+						dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 10)
+						dxDrawLine3D(x, y, z+0.15, x, y, z-0.15, 0xFFFFFFFF, 5)
+					end
 					
 					if not foundWaypoint then
 						local sX, sY = getScreenFromWorldPosition(x, y, z, 0.05, false)
@@ -1961,6 +1984,7 @@ function tas.pathWay()
 					end
 				end
 			end
+			
 			if foundWaypoint then
 				tas.var.editor_select = foundWaypoint
 				local text_offset = 0
@@ -1980,6 +2004,7 @@ function tas.pathWay()
 						setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
 					end
 				end
+				
 			else
 				if not tas.var.editor_dummy_client then
 					tas.var.editor_select = false
@@ -1987,16 +2012,24 @@ function tas.pathWay()
 			end
 			
 		elseif tas.var.editor == "freecam" then
-			for i = 1, #tas.data - 1, tas.settings.debugging.frameSkipping do
+		
+			local frameSkipping = tas.settings.debugging.frameSkipping
+			
+			for i = 1, #tas.data - 1, frameSkipping do
 				local x, y, z = unpack(tas.data[i].p)
 				local x2, y2, z2
-				local last = tas.data[i + tas.settings.debugging.frameSkipping]
+				local last = tas.data[i + frameSkipping]
 				if not last then last = tas.data[#tas.data] end
 				x2, y2, z2 = unpack(last.p)
 				--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
-				dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 15)
+				local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
+				if distanceBetween < distanceThreshold then
+					dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 15)
+				end
 			end
+			
 		end
+		
 		return
 	end
 
@@ -2012,7 +2045,10 @@ function tas.pathWay()
 				local x2, y2, z2 = unpack(tas.data[i + frameSkipping].p)
 				local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
 				
-				dxDrawLine3D(x, y, z, x2, y2, z2, ground, 5)
+				local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
+				if distanceBetween < distanceThreshold then
+					dxDrawLine3D(x, y, z, x2, y2, z2, ground, 5)
+				end
 			end
 		end
 		
@@ -2092,6 +2128,18 @@ function tas.pathWay()
 end
 
 -- // Editor Events
+
+addEventHandler("onClientResourceStart", root, function(started)
+	if getResourceName(started) == "editor_main" and tas.settings.enableEditorMode then
+		tas.prompt("Warning! $$TAS - Editor Mode ##and its features has been #00AA00enabled##. $$Warnings ##and $$run segmentation ##have been $$disabled##!")
+		tas.prompt("If you have a run recorded, please save it $$NOW ##using $$/saver [name]##!")
+		setTimer(function()
+			tas.var.editor = isCursorShowing() == true and "cursor" or "freecam"
+			tas.settings.debugging.frameSkipping = 5
+		end, 500, 1)
+	end
+end)
+
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
 	if not getKeyState("f3") and not exports["editor_main"]:getSelectedElement() then -- LOL EZ FIX (PLEASE MAKE IT WORK)
@@ -2121,6 +2169,7 @@ end)
 addEvent("onFreecamMode")
 addEventHandler("onFreecamMode", root, function(...)
 	tas.var.editor = "freecam"
+	tas.settings.debugging.frameSkipping = 5
 	
 	-- // i gotta stop forgor-ing
 	if tas.var.editor_dummy_client then
