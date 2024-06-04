@@ -1,7 +1,8 @@
 <meta>
-    <info author="chris1384" version="1.0" name="TAS - Anti-Sc Generator" description="Tool to prove to others that you can script." type="script" />
-    <min_mta_version client="1.5.5-9.14060" server="1.5.5-9.14060"></min_mta_version>
+	<info author="chris1384" version="1.0" name="TAS - Anti-Sc Generator" description="Tool to prove to others that you can script." type="script" />
+	<min_mta_version client="1.5.5-9.14060" server="1.5.5-9.14060"></min_mta_version>
 	
 	<script src="client.lua" type="client" cache="false"/>
 	<script src="rotation-antisc.lua" type="client"/>
+	<script src="isbackwards.lua" type="client"/>
 </meta>
