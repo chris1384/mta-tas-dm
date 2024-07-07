@@ -142,7 +142,7 @@ function waypointSelector()
 					if v and getVehicleController(v) == e then
 						local rx, ry, rz = getElementRotation(v)
 						local mrx, mry, mrz = unpack(selector.r)
-						if (antiScType == "rotation" and not (is_within_tolerance(direction_vector(rx, ry, rz, rotation_axis), direction_vector(mrx, mry, mrz, rotation_axis), rotation_precision))) or (antiScType == "anti-fw" and not isBackwards(v)) or (antiScType == "anti-bw" and isBackwards(v)) then
+						if (antiScType == "rotation" and not (is_within_tolerance(direction_vector({rx, ry, rz}, rotation_axis), direction_vector({mrx, mry, mrz}, rotation_axis), rotation_precision))) or (antiScType == "anti-fw" and not isBackwards(v)) or (antiScType == "anti-bw" and isBackwards(v)) then
 							-- no, we don't want to do insta-kill payloads, that shit is nasty in editor
 							-- also 'loadstring' got restricted by MTA XDDD
 							setElementVelocity(v, 0, 0, 0) 
@@ -204,7 +204,7 @@ function antiScHandler(cmd, precision)
 					if v and getVehicleController(v) == e then
 						local rx, ry, rz = getElementRotation(v)
 						local mrx, mry, mrz = unpack(selector.r)
-						if (antiScType == "rotation" and not (is_within_tolerance(direction_vector(rx, ry, rz, rotation_axis), direction_vector(mrx, mry, mrz, rotation_axis), rotation_precision))) or (antiScType == "anti-fw" and not isBackwards(v)) or (antiScType == "anti-bw" and isBackwards(v)) then
+						if (antiScType == "rotation" and not (is_within_tolerance(direction_vector({rx, ry, rz}, rotation_axis), direction_vector({mrx, mry, mrz}, rotation_axis), rotation_precision))) or (antiScType == "anti-fw" and not isBackwards(v)) or (antiScType == "anti-bw" and isBackwards(v)) then
 							-- no, we don't want to do insta-kill payloads, that shit is nasty in editor
 							setElementVelocity(v, 0, 0, 0) 
 							setElementPosition(v, 2940.2746, -2051.7504, 3.1619) 
@@ -338,7 +338,7 @@ function onRender()
 		if v and antiScType == "rotation" then --for k,v in ipairs(getElementsByType("vehicle", root, true)) do
 			local x, y, z = getElementPosition(v)
 			local rx, ry, rz = getElementRotation(v)
-			local dx, dy, dz = unpack(direction_vector(rx, ry, rz, rotation_axis))
+			local dx, dy, dz = unpack(direction_vector({rx, ry, rz}, rotation_axis))
 			dxDrawLine3D(x, y, z, x+dx*10, y+dy*10, z+dz*10, 0xFFAAAAAA, 5)
 		end
 	end
@@ -349,7 +349,7 @@ function onRender()
 			
 			if antiScType == "rotation" then
 				local rx, ry, rz = unpack(selector.r)
-				local dx, dy, dz = unpack(direction_vector(rx, ry, rz, rotation_axis))
+				local dx, dy, dz = unpack(direction_vector({rx, ry, rz}, rotation_axis))
 				dxDrawLine3D(x, y, z, x+dx*10, y+dy*10, z+dz*10, 0xFFFFAAAA, 5)
 			end
 			
