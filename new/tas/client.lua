@@ -1,6 +1,6 @@
 --[[
 		* TAS - Recording Tool by chris1384 @2020
-		* version 1.4.3
+		* version 1.4.4
 ]]
 
 -- // the root of your problems
@@ -34,7 +34,8 @@ local tas = {
 		
 		editor = "none", 
 		--[[ Editor mode, it can be:
-			- none : editor_gui is inactive (resource not running or map testing - default behaviour)
+			- none : editor_main is inactive (resource not running - default behaviour)
+			- test : editor_main is active, editor_test is running
 			- freecam : you're currently flying in editor (uses frameSkipping for pathway = low CPU usage)
 			- cursor : you're in cursor mode (dummy vehicles can be created, frameSkipping disabled)
 		]]
@@ -107,6 +108,18 @@ local tas = {
 		
 		keepWarpData = false, -- keep all warps whenever you're starting a new run, keep this as 'false' as loading warps from previous runs can have unexpected results, but can have undesired effects while gameplaying
 		saveWarpData = true, -- save warp data to .tas files
+		
+		syncWarps = true,
+		--[[
+			sync all warps between the clients, you can load their warps using the '/rlw' command
+			USAGE: /rlw player [ID]
+			-- player = full or partial playername
+			-- [ID] = OPTIONAL, if not specified, it'll load their last warp. Warp ID can vary a lot
+			WARNING: by disabling this, you also disable syncing your warps to the server, disable players using your warps, and also disable your ability to warp to others.
+			why? just to make you rethink about your option, or privacy, do what you want to do.
+			and maybe optimization
+			fuckin nerd
+		]]
 		-- //
 		
 		
@@ -164,6 +177,10 @@ local tas = {
 		-- //
 		
 		
+		-- // Misc
+		detectGround = true, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
+		
+		
 		-- // Debugging (uneditable in-game)
 		debugging = {
 			level = 0,
@@ -183,8 +200,6 @@ local tas = {
 			wholeFrameClipDistance = 200, -- farClipDistance for full frames, so it won't display everything.
 			
 			warpsRenderLevel = 3, -- at which debug-level should warps start rendering (text and marker)
-			
-			detectGround = false, -- tell TAS to capture whenever the wheels from the vehicle is touching something. probably best to use it in debugging.
 		},
 		-- //
 		
@@ -361,7 +376,7 @@ function tas.init()
 	-- // << Until here 
 	
 	if tas.settings.startPrompt then
-		tas.prompt("Recording Tool $$v1.4.3 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
+		tas.prompt("Recording Tool $$v1.4.4 ##by #FFAAFFchris1384 ##has started!", 255, 100, 100)
 		tas.prompt("Type $$/tashelp ##for commands!", 255, 100, 100)
 		
 		if config_loaded then
@@ -392,6 +407,8 @@ function tas.stop(stoppedResource)
 			tas.var.editor_dummy_client = nil
 		end
 		
+		tas.prompt("Editor mode has been $$disabled##!")
+		
 	end
 end
 addEventHandler("onClientResourceStop", root, tas.stop)
@@ -403,15 +420,18 @@ function tas.commands(cmd, ...)
 	
 	local vehicle = tas.cveh(localPlayer)
 	
+	-- // /tas
 	if cmd == tas.registered_commands.tas then
+	
 		if #args == 0 then
 			tas.prompt("")
-			tas.prompt("Recording Tool $$v1.4.3 ##by #FFAAFFchris1384##!", 255, 100, 100)
+			tas.prompt("Recording Tool $$v1.4.4 ##by #FFAAFFchris1384##!", 255, 100, 100)
 			tas.prompt("For updates and documentation, please see the $$GitHub ##link below:", 255, 100, 100)
 			tas.prompt("https://github.com/chris1384/mta-tas-dm $$(copied to clipboard)", 255, 100, 255)
 			tas.prompt("For #64FF64futher help ##or #FF3232bug reports##, please send me a message on #5865F2Discord##!", 255, 100, 100)
 			tas.prompt("Thank $$you ##for using my tool, and to $$everyone ##who contributed to it! $$♥", 255, 100, 100)
 			setClipboard("https://github.com/chris1384/mta-tas-dm")
+			
 		elseif #args >= 1 then
 			for k,v in pairs(tas.registered_commands) do
 				if v == args[1] then
@@ -421,9 +441,12 @@ function tas.commands(cmd, ...)
 					return
 				end
 			end
+			
 		end
 		
 		return true
+		
+		
 	-- // Record
 	elseif cmd == tas.registered_commands.record then
 		
@@ -433,7 +456,7 @@ function tas.commands(cmd, ...)
 		if tas.timers.saving_timer then tas.prompt("Recording failed, please wait for the file to be $$saved##!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Recording failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
-		if tas.settings.useWarnings and not tas.settings.enableEditorMode then
+		if tas.settings.useWarnings and (not tas.settings.enableEditorMode or tas.var.editor == "none") then
 			if not tas.var.recording and not tas.timers.warnRecord then
 				tas.timers.warnRecord = setTimer(function() tas.timers.warnRecord = nil end, 5000, 1)
 				if #tas.data > 0 then
@@ -465,8 +488,9 @@ function tas.commands(cmd, ...)
 		else
 			tas.data = {}
 			
-			if not tas.settings.keepWarpData then
+			if not tas.settings.enableEditorMode and not tas.settings.keepWarpData then
 				tas.warps = {}
+				triggerServerEvent("tas:syncWarps", localPlayer, "clear")
 			end
 			
 			tas.var.recording = true
@@ -537,7 +561,7 @@ function tas.commands(cmd, ...)
 			tick = tas.data[#tas.data].tick
 		end
 		
-		table_insert(tas.warps, {
+		local saveTable = {
 			frame = #tas.data,
 			tick = tick,
 			p = p,
@@ -547,7 +571,11 @@ function tas.commands(cmd, ...)
 			h = health,
 			m = model,
 			n = nos,
-		})
+		}
+		
+		table_insert(tas.warps, saveTable)
+		
+		triggerServerEvent("tas:syncWarps", localPlayer, "save", saveTable)
 								
 		tas.prompt("Warp $$#"..tostring(#tas.warps).." ##saved!", 60, 180, 255)
 		
@@ -555,20 +583,65 @@ function tas.commands(cmd, ...)
 	elseif cmd == tas.registered_commands.load_warp then
 		
 		if not vehicle then tas.prompt("Loading warp failed, get a $$vehicle ##first!", 255, 100, 100) return end
-		if #tas.warps == 0 then tas.prompt("Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		if tas.var.playbacking then tas.prompt("Loading warp failed, stop $$playbacking ##first!", 255, 100, 100) return end
 		if tas.timers.resume_load then tas.prompt("Loading warp failed, please wait for the resume trigger!", 255, 100, 100) return end
 		if tas.var.rewinding or tas.timers.rewind_load then tas.prompt("Loading warp failed, please wait for the rewinding trigger!", 255, 100, 100) return end
 		
+		local targetPlayerLoaded
+		local w_data
 		local warp_number = #tas.warps
+		
 		if args[1] ~= nil then
-			warp_number = tonumber(args[1])
-			if not warp_number or not tas.warps[warp_number] then
-				tas.prompt("Loading warp failed, $$nonexistent ##warp index!", 255, 100, 100) return
+		
+			local warpPlayer = getPlayerFromPartialName(args[1])
+			
+			if tonumber(args[1]) or (not warpPlayer and not args[2]) then
+				
+				warp_number = tonumber(args[1])
+				if not warp_number or not tas.warps[warp_number] then
+					tas.prompt("Loading warp failed, $$non-existent ##warp index!", 255, 100, 100) 
+					return
+				end
+
+			elseif warpPlayer and not args[2] then
+				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
+				tas.prompt("Loading "..warpName.."##'s warp failed, warp $$ID ##is required!", 255, 100, 100) 
+				return
+				
+			elseif warpPlayer and args[2] then
+			
+				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
+				local warpPlayerData = getElementData(warpPlayer, "tas:clientWarps")
+				
+				if warpPlayerData and type(warpPlayerData) == "table" then
+				
+					warp_number = tonumber(args[2])
+					
+					if warp_number and warpPlayerData[warp_number] then
+						w_data = warpPlayerData[warp_number]
+						targetPlayerLoaded = warpName
+					else
+						tas.prompt("Loading "..string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer).."##'s warp failed, $$non-existent ##warp index!", 255, 100, 100) 
+						return
+					end
+				
+				else
+				
+					tas.prompt("Loading "..string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer).."##'s warp failed, player has $$no warps##!", 255, 100, 100) 
+					return
+					
+				end
 			end
+		
+		else
+		
+			if #tas.warps == 0 then tas.prompt("Loading warp failed, no $$warps ##recorded!", 255, 100, 100) return end
+				
 		end
 		
-		local w_data = tas.warps[warp_number]
+		if not w_data then
+			w_data = tas.warps[warp_number]
+		end
 		
 		if tas.var.recording then
 			if not tas.settings.enableEditorMode then
@@ -642,7 +715,11 @@ function tas.commands(cmd, ...)
 			
 		end, tas.settings.warpDelay, 1)
 								
-		tas.prompt("Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
+		if targetPlayerLoaded then
+			tas.prompt(targetPlayerLoaded .. "##'s warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
+		else
+			tas.prompt("Warp $$#"..tostring(warp_number).." ##loaded!", 255, 180, 60)
+		end
 		
 	-- // Delete Warp
 	elseif cmd == tas.registered_commands.delete_warp then
@@ -655,6 +732,8 @@ function tas.commands(cmd, ...)
 		if last_warp == 0 then tas.prompt("Deleting warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		
 		table_remove(tas.warps, last_warp)
+		triggerServerEvent("tas:syncWarps", localPlayer, "delete", last_warp)
+		
 		tas.prompt("Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
 	
 	-- // Resume
@@ -968,6 +1047,8 @@ function tas.commands(cmd, ...)
 									tas.data = {}
 									tas.warps = {}
 									
+									triggerServerEvent("tas:syncWarps", localPlayer, "clear")
+									
 									return
 								else
 									tas.prompt("Loading record warning, invalid run line $$#"..tostring(i).." ##skipped.", 255, 100, 100)
@@ -1028,6 +1109,9 @@ function tas.commands(cmd, ...)
 									fileClose(load_file)
 									tas.data = {}
 									tas.warps = {}
+									
+									triggerServerEvent("tas:syncWarps", localPlayer, "clear")
+									
 									return
 								
 								else
@@ -1059,6 +1143,8 @@ function tas.commands(cmd, ...)
 				tas.data = {}
 				tas.warps = {}
 				
+				triggerServerEvent("tas:syncWarps", localPlayer, "clear")
+				
 				return
 			end
 			-- //
@@ -1080,6 +1166,8 @@ function tas.commands(cmd, ...)
 			
 			file_additional.time = string.format("%02d:%02d:%02d", math.floor(tas.data[hunter_found].tick/1000/60), tas.data[hunter_found].tick/1000%60, (tas.data[#tas.data].tick/1000%1)*100)
 			if not file_additional.time then file_additional.time = "N/A" end
+			
+			triggerServerEvent("tas:syncWarps", localPlayer, "import", tas.warps)
 			
 			tas.prompt("File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(tas.var.fps).." ##FPS / $$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
 			tas.prompt("Author: $$".. file_additional.author.."##/ Time: $$".. file_additional.time, 255, 255, 100)
@@ -1133,6 +1221,8 @@ function tas.commands(cmd, ...)
 		tas.data = {}
 		tas.warps = {}
 		tas.var.prompts = {}
+		
+		triggerServerEvent("tas:syncWarps", localPlayer, "clear")
 		
 		tas.prompt("Cleared all data.", 255, 100, 255)
 		
@@ -1418,9 +1508,12 @@ function tas.render_record(deltaTime)
 					tas.nos(vehicle, frame_data.n)
 				end
 				
-				if tas.warps[#tas.warps] ~= nil then
-					if tas.warps[#tas.warps].tick == nil or tas.warps[#tas.warps].tick > frame_data.tick then
-						tas.warps[#tas.warps] = nil
+				local totalWarps = #tas.warps
+				
+				if tas.warps[totalWarps] ~= nil then
+					if tas.warps[totalWarps].tick == nil or tas.warps[totalWarps].tick > frame_data.tick then
+						tas.warps[totalWarps] = nil
+						triggerServerEvent("tas:syncWarps", localPlayer, "delete", totalWarps)
 					end
 				end
 				
@@ -1618,7 +1711,7 @@ function tas.record_state(vehicle)
 		end
 		
 		local ground = nil
-		if tas.settings.debugging.detectGround then
+		if tas.settings.detectGround then
 			for i=0,3 do
 				if isVehicleWheelOnGround(vehicle, i) then
 					ground = true
@@ -1961,11 +2054,14 @@ function tas.pathWay()
 			for i = 1, #tas.data - 1 do
 				local x, y, z = unpack(tas.data[i].p)
 				if not tas.settings.debugging.wholeFrameClipDistance or (tas.settings.debugging.wholeFrameClipDistance and tas.dist3D(pX, pY, pZ, x, y, z) < tas.settings.debugging.wholeFrameClipDistance) then
+
 					local x2, y2, z2 = unpack(tas.data[i + 1].p)
 					local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
-					--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+					
+					local ground = (tas.data[i].g == true and 0xAAAAAAAA) or 0xAAFF0000
+					
 					if distanceBetween < distanceThreshold then
-						dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 10)
+						dxDrawLine3D(x, y, z, x2, y2, z2, ground, 12)
 						dxDrawLine3D(x, y, z+0.15, x, y, z-0.15, 0xFFFFFFFF, 5)
 					end
 					
@@ -2011,7 +2107,7 @@ function tas.pathWay()
 				end
 			end
 			
-		elseif tas.var.editor == "freecam" then
+		elseif tas.var.editor == "freecam" or tas.var.editor == "test" then
 		
 			local frameSkipping = tas.settings.debugging.frameSkipping
 			
@@ -2021,10 +2117,10 @@ function tas.pathWay()
 				local last = tas.data[i + frameSkipping]
 				if not last then last = tas.data[#tas.data] end
 				x2, y2, z2 = unpack(last.p)
-				--local ground = (tas.data[i].g == true and tocolor(150, 150, 150, 150)) or tocolor(255, 0, 0, 150)
+				local ground = (tas.data[i].g == true and 0xAAAAAAAA) or 0xAAFF0000
 				local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
 				if distanceBetween < distanceThreshold then
-					dxDrawLine3D(x, y, z, x2, y2, z2, 0xAAFF0000, 15)
+					dxDrawLine3D(x, y, z, x2, y2, z2, ground, 10)
 				end
 			end
 			
@@ -2130,7 +2226,7 @@ end
 -- // Editor Events
 
 addEventHandler("onClientResourceStart", root, function(started)
-	if getResourceName(started) == "editor_main" and tas.settings.enableEditorMode then
+	if (getResourceName(started) == "editor_main" or (started == resource and getResourceFromName("editor_main"))) and tas.settings.enableEditorMode then
 		tas.prompt("Warning! $$TAS - Editor Mode ##and its features has been #00AA00enabled##. $$Warnings ##and $$run segmentation ##have been $$disabled##!")
 		tas.prompt("If you have a run recorded, please save it $$NOW ##using $$/saver [name]##!")
 		setTimer(function()
@@ -2143,7 +2239,7 @@ end)
 addEvent("onEditorSuspended")
 addEventHandler("onEditorSuspended", root, function(...)
 	if not getKeyState("f3") and not exports["editor_main"]:getSelectedElement() then -- LOL EZ FIX (PLEASE MAKE IT WORK)
-		tas.var.editor = "none"
+		tas.var.editor = "test"
 	end
 	
 	if tas.var.editor_dummy_client then
@@ -2480,4 +2576,18 @@ end
 -- // Wrapper for tocolor
 function tocolor(r, g, b, a)
 	return b + g * 256 + r * 256 * 256 + (a or 255) * 256 * 256 * 256
+end
+
+-- // getPlayerFromName but better
+function getPlayerFromPartialName(name)
+    local name = name and name:gsub("#%x%x%x%x%x%x", ""):lower() or nil
+    if name then
+        for _, player in ipairs(getElementsByType("player")) do
+            local name_ = getPlayerName(player):gsub("#%x%x%x%x%x%x", ""):lower()
+            if name_:find(name, 1, true) then
+                return player
+            end
+        end
+    end
+    return nil
 end

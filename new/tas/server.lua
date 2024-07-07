@@ -1,12 +1,13 @@
 --[[
 		* TAS - Recording Tool by chris1384 @2020
-		* version 1.4.3
+		* version 1.4.4
 ]]
 
 local tas = {
 	var = {
 		cooldowns = {},
 		handles = {},
+		warps = {},
 		isCreatingDummy = false,
 	},
 	settings = {
@@ -34,8 +35,14 @@ tas.registered_commands = {
 
 -- // Initialization
 function tas.init()
+
 	for _,v in pairs(tas.registered_commands) do
 		addCommandHandler(v, tas.commands)
+	end
+	
+	for _,v in ipairs(getElementsByType("player")) do
+		tas.var.warps[v] = {}
+		removeElementData(v, "tas:clientWarps")
 	end
 end
 addEventHandler("onResourceStart", resourceRoot, tas.init)
@@ -140,8 +147,10 @@ function tas.commands(player, cmd, ...)
 		if tas.var.handles[player] then
 			cancelLatentEvent(tas.var.handles[player])
 		end
+		
 		tas.var.cooldowns[player] = nil
 		triggerClientEvent(player, "tas:onClientGlobalRequest", player, "forcecancel")
+		
 	end
 end
 
@@ -245,6 +254,7 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 	
 	elseif handleType == "failed_save" then
 		tas.var.cooldowns[player] = nil
+		
 	end
 	-- //
 end)
@@ -258,8 +268,10 @@ addEventHandler("onRaceStateChanging", root, function(new)
 	
 	if new == "Running" then
 		triggerClientEvent(everyone, "tas:triggerCommand", resourceRoot, "Started")
+		
 	elseif new == "NoMap" or new == "PostFinish" then
 		triggerClientEvent(everyone, "tas:triggerCommand", resourceRoot, "Stop")
+		
 	end
 	
 end)
@@ -272,11 +284,39 @@ addEventHandler("tas:syncClient", root, function(event, value)
 	
 	if event == "vehiclechange" then
 		setElementModel(vehicle, value)
+		
 	elseif event == "nos" then
 		if value == true then
 			addVehicleUpgrade(vehicle, 1010)
 		else
 			removeVehicleUpgrade(vehicle, getVehicleUpgradeOnSlot(vehicle, 8))
+		end
+		
+	end
+end)
+
+addEvent("tas:syncWarps", true)
+addEventHandler("tas:syncWarps", root, function(action, data)
+	if client then
+	
+		if not tas.var.warps[client] then tas.var.warps[client] = {} end
+		
+		if action == "import" then
+			tas.var.warps[client] = data
+			setElementData(client, "tas:clientWarps", tas.var.warps[client])
+			
+		elseif action == "save" then
+			table.insert(tas.var.warps[client], data)
+			setElementData(client, "tas:clientWarps", tas.var.warps[client])
+			
+		elseif action == "delete" then
+			table.remove(tas.var.warps[client], data)
+			setElementData(client, "tas:clientWarps", tas.var.warps[client])
+			
+		elseif action == "clear" then
+			tas.var.warps[client] = {}
+			removeElementData(client, "tas:clientWarps")
+			
 		end
 	end
 end)
@@ -333,6 +373,7 @@ addEventHandler("onPlayerQuit", root, function()
 	local player = source
 	tas.var.cooldowns[player] = nil
 	tas.var.handles[player] = nil
+	tas.var.warps[player] = nil
 end)
 
 -- // Command messages
