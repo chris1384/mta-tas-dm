@@ -262,7 +262,7 @@ function generateAntiScScript(scriptType)
 	local firstTimeIntroComment = (firstTime == true and "-- //\n-- // MARKERS ANTI-SC\n-- //\n\n") or ""
 	local firstTimePasteComment = (firstTime == true and "\n\n-- now place new markers under this spot") or ""
 
-	local payloadCondition = (scriptType == "rotation" and "not (is_within_tolerance(direction_vector({getElementRotation(v)}, '"..rotation_axis.."'), direction_vector("..tostring(float(selector.r[1]))..", "..tostring(float(selector.r[2]))..", "..tostring(float(selector.r[3]))..", '"..rotation_axis.."'), ".. tostring(rotation_precision).."))") or (scriptType == "anti-fw" and "not (isBackwards(v))") or (scriptType == "anti-bw" and "(isBackwards(v))") or "true" -- rollback, trigger everytime the marker is touched (why? idk u tell me)
+	local payloadCondition = (scriptType == "rotation" and "not (is_within_tolerance(direction_vector({getElementRotation(v)}, '"..rotation_axis.."'), direction_vector({"..tostring(float(selector.r[1]))..", "..tostring(float(selector.r[2]))..", "..tostring(float(selector.r[3])).."}, '"..rotation_axis.."'), ".. tostring(rotation_precision).."))") or (scriptType == "anti-fw" and "not (isBackwards(v))") or (scriptType == "anti-bw" and "(isBackwards(v))") or "true" -- rollback, trigger everytime the marker is touched (why? idk u tell me)
 	
 	local markerPosition = tostring(float(selector.p[1]))..", "..tostring(float(selector.p[2]))..", "..tostring(float(selector.p[3]))
 	local markerVariable = 'createMarker('..markerPosition..', "corona", '..tostring(markerSize)..', '..tostring(markerR)..', '..tostring(markerG)..', '..tostring(markerB)..', '..tostring(markerAlpha)..')'
