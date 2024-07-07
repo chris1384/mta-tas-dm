@@ -28,10 +28,10 @@ function matrix_multiply(m, v)
     return result
 end
 
-function direction_vector(x, y, z, direction)
-    x = math.rad(x)
-    y = math.rad(y)
-    z = math.rad(z)
+function direction_vector(rotation, direction)
+    local x = math.rad(rotation[1])
+    local y = math.rad(rotation[2])
+    local z = math.rad(rotation[3])
 
     local Rx = {{1, 0, 0}, {0, math.cos(x), -math.sin(x)}, {0, math.sin(x), math.cos(x)}}
     local Ry = {{math.cos(y), 0, math.sin(y)}, {0, 1, 0}, {-math.sin(y), 0, math.cos(y)}}
@@ -39,11 +39,11 @@ function direction_vector(x, y, z, direction)
 
 	-- // edited by @chris1384
     local v = {1, 0, 0} -- default "x"
-	if direction == "y" then
-		v = {0, 1, 0}
-	elseif direction == "z" then
-		v = {0, 0, 1}
-	end
+    if direction == "y" then
+        v = {0, 1, 0}
+    elseif direction == "z" then
+        v = {0, 0, 1}
+    end
 
     v = matrix_multiply(Rx, v)
     v = matrix_multiply(Ry, v)
