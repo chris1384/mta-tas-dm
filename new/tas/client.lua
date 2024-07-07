@@ -575,8 +575,10 @@ function tas.commands(cmd, ...)
 		
 		table_insert(tas.warps, saveTable)
 		
-		triggerServerEvent("tas:syncWarps", localPlayer, "save", saveTable)
-								
+		if tas.settings.syncWarps then
+			triggerServerEvent("tas:syncWarps", localPlayer, "save", saveTable)
+		end
+		
 		tas.prompt("Warp $$#"..tostring(#tas.warps).." ##saved!", 60, 180, 255)
 		
 	-- // Load Warp
@@ -604,13 +606,20 @@ function tas.commands(cmd, ...)
 				end
 
 			elseif warpPlayer and not args[2] then
+			
 				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
+				
+				if not tas.settings.syncWarps then tas.prompt("Loading "..warpName.."##'s warp failed, $$'syncWarps' ##cvar is disabled!", 255, 100, 100) return end
+				
 				tas.prompt("Loading "..warpName.."##'s warp failed, warp $$ID ##is required!", 255, 100, 100) 
 				return
 				
 			elseif warpPlayer and args[2] then
 			
 				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
+				
+				if not tas.settings.syncWarps then tas.prompt("Loading "..warpName.."##'s warp failed, $$'syncWarps' ##cvar is disabled!", 255, 100, 100) return end
+				
 				local warpPlayerData = getElementData(warpPlayer, "tas:clientWarps")
 				
 				if warpPlayerData and type(warpPlayerData) == "table" then
@@ -732,6 +741,7 @@ function tas.commands(cmd, ...)
 		if last_warp == 0 then tas.prompt("Deleting warp failed, no $$warps ##recorded!", 255, 100, 100) return end
 		
 		table_remove(tas.warps, last_warp)
+		
 		triggerServerEvent("tas:syncWarps", localPlayer, "delete", last_warp)
 		
 		tas.prompt("Warp $$#"..tostring(last_warp).." ##deleted!", 255, 50, 50)
@@ -1167,7 +1177,9 @@ function tas.commands(cmd, ...)
 			file_additional.time = string.format("%02d:%02d:%02d", math.floor(tas.data[hunter_found].tick/1000/60), tas.data[hunter_found].tick/1000%60, (tas.data[#tas.data].tick/1000%1)*100)
 			if not file_additional.time then file_additional.time = "N/A" end
 			
-			triggerServerEvent("tas:syncWarps", localPlayer, "import", tas.warps)
+			if tas.settings.syncWarps then
+				triggerServerEvent("tas:syncWarps", localPlayer, "import", tas.warps)
+			end
 			
 			tas.prompt("File '$$"..args[1]..".tas##' has been loaded! ($$"..tostring(tas.var.fps).." ##FPS / $$"..tostring(#tas.data).." ##frames / $$"..tostring(#tas.warps).." ##warps)", 255, 255, 100)
 			tas.prompt("Author: $$".. file_additional.author.."##/ Time: $$".. file_additional.time, 255, 255, 100)
