@@ -92,6 +92,8 @@ local tas = {
 		
 		editorEnableDummy = true, -- enable the creation of MRT dummies
 		editorDummyKey = "v", -- create vehicle dummy key
+		
+		editorTestLine = false, -- show TAS lines when testing maps
 		-- //
 		
 		
@@ -115,7 +117,7 @@ local tas = {
 			USAGE: /rlw player [ID]
 			-- player = full or partial playername
 			-- [ID] = OPTIONAL, if not specified, it'll load their last warp. Warp ID can vary a lot
-			WARNING: by disabling this, you also disable syncing your warps to the server, disable players using your warps, and also disable your ability to warp to others.
+			WARNING: by disabling this, you also disable syncing your warps to the server (if no warps were saved), and also disable your ability to warp to others.
 			why? just to make you rethink about your option, or privacy, do what you want to do.
 			and maybe optimization
 			fuckin nerd
@@ -604,7 +606,8 @@ function tas.commands(cmd, ...)
 					tas.prompt("Loading warp failed, $$non-existent ##warp index!", 255, 100, 100) 
 					return
 				end
-
+				
+			--[[
 			elseif warpPlayer and not args[2] then
 			
 				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
@@ -613,8 +616,9 @@ function tas.commands(cmd, ...)
 				
 				tas.prompt("Loading "..warpName.."##'s warp failed, warp $$ID ##is required!", 255, 100, 100) 
 				return
-				
-			elseif warpPlayer and args[2] then
+			]]
+			
+			elseif warpPlayer then
 			
 				local warpName = string.format("#%.2X%.2X%.2X", getPlayerNametagColor(warpPlayer)) .. getPlayerName(warpPlayer)
 				
@@ -624,7 +628,7 @@ function tas.commands(cmd, ...)
 				
 				if warpPlayerData and type(warpPlayerData) == "table" then
 				
-					warp_number = tonumber(args[2])
+					warp_number = tonumber(args[2]) or #warpPlayerData
 					
 					if warp_number and warpPlayerData[warp_number] then
 						w_data = warpPlayerData[warp_number]
@@ -2108,6 +2112,7 @@ function tas.pathWay()
 						--local x, y, z = getElementPosition(tas.var.editor_dummy_client)
 						--setElementPosition(tas.var.editor_dummy_client, tas.lerp(x, data.p[1], 0.25), tas.lerp(y, data.p[2], 0.25), tas.lerp(z, data.p[3], 0.25))
 						
+						setElementModel(tas.var.editor_dummy_client, data.m)
 						setElementPosition(tas.var.editor_dummy_client, data.p[1], data.p[2], data.p[3])
 						setElementRotation(tas.var.editor_dummy_client, data.r[1], data.r[2], data.r[3])
 					end
@@ -2119,7 +2124,7 @@ function tas.pathWay()
 				end
 			end
 			
-		elseif tas.var.editor == "freecam" or tas.var.editor == "test" then
+		elseif tas.var.editor == "freecam" or tas.settings.editorTestLine then
 		
 			local frameSkipping = tas.settings.debugging.frameSkipping
 			
@@ -2129,7 +2134,7 @@ function tas.pathWay()
 				local last = tas.data[i + frameSkipping]
 				if not last then last = tas.data[#tas.data] end
 				x2, y2, z2 = unpack(last.p)
-				local ground = (tas.data[i].g == true and 0xAAAAAAAA) or 0xAAFF0000
+				local ground = (tas.data[i].g == true and 0xBABABABA) or 0xBAFF0000
 				local distanceBetween = tas.dist3D(x, y, z, x2, y2, z2)
 				if distanceBetween < distanceThreshold then
 					dxDrawLine3D(x, y, z, x2, y2, z2, ground, 10)
@@ -2242,7 +2247,7 @@ addEventHandler("onClientResourceStart", root, function(started)
 		tas.prompt("Warning! $$TAS - Editor Mode ##and its features has been #00AA00enabled##. $$Warnings ##and $$run segmentation ##have been $$disabled##!")
 		tas.prompt("If you have a run recorded, please save it $$NOW ##using $$/saver [name]##!")
 		setTimer(function()
-			tas.var.editor = isCursorShowing() == true and "cursor" or "freecam"
+			tas.var.editor = (getResourceFromName("editor_test") ~= false and "test") or (isCursorShowing() == true and "cursor" or "freecam")
 			tas.settings.debugging.frameSkipping = 5
 		end, 500, 1)
 	end
