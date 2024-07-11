@@ -45,7 +45,7 @@ local tas = {
 			
 	data = {}, -- run data
 	warps = {}, -- warps
-	entities = {}, -- [UNUSED]
+	entities = {}, -- [USED]
 	textures = {}, -- textures duuh
 	
 	-- // Settings incoming, these can be edited here directly or using the in-game command (/tascvar)
@@ -2465,7 +2465,7 @@ function tas.globalRequestData(handleType, ...)
 		
 		if fileExists(fileTarget) then 
 			fileDelete(fileTarget)
-			tas.prompt("Warning! Existing file $$("..args[2]..".tas) ##has been deleted!", 255, 255, 100)
+			tas.prompt("Warning! Existing file $$("..args[2]..".tas) ##has been overwritten!", 255, 150, 100)
 		end
 		
 		local load_file = fileCreate(fileTarget)
@@ -2474,7 +2474,8 @@ function tas.globalRequestData(handleType, ...)
 			fileClose(load_file)
 		end
 		
-		tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record.." "..args[2].." ##!", 255, 255, 100)
+		executeCommandHandler(tas.registered_commands.load_record, args[2])
+		--tas.prompt("File $$"..args[2]..".tas ##has been downloaded! Load it using $$/"..tas.registered_commands.load_record.." "..args[2].." ##!", 255, 255, 100)
 		
 		triggerServerEvent("tas:onGlobalRequest", localPlayer, "success_load")
 		
@@ -2511,8 +2512,12 @@ function updateUserConfig()
 end
 
 -- // might come in handy for devs
-function getTASData()
-	return tas
+function getTASData(selective)
+	if selective then
+		return tas[selective]
+	else
+		return tas
+	end
 end
 
 -- // Nitro detection and modify stats (playback and load warp)
