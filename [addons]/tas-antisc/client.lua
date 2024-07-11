@@ -98,7 +98,7 @@ addEventHandler("onClientResourceStart", resourceRoot, function()
 	prompt("Do $$/antisc ##to switch between $$'rotation'##, $$'anti-fw' ##or $$'anti-bw' ##anti-scs. You need to create another marker to apply.")
 	prompt("To edit precision of rotation anti-sc, use $$/precision [nr]")
 	prompt("Lower values mean $$stricter ##rotation precision. Default is $$"..tostring(rotation_precision).."##.")
-	prompt("Have fun legend! $$<3 ##- #FFAAFFchris1384")
+	--prompt("Have fun legend! $$<3 ##- #FFAAFFchris1384")
 	
 	bindKey(selectionKey, "down", waypointSelector)
 	addCommandHandler("antisc", antiScHandler)
@@ -125,7 +125,7 @@ function waypointSelector()
 		previewMarker = nil
 	end
 			
-	tas = exports.tas:getTASData() -- heavy function 'l2p'
+	tas = {var = exports.tas:getTASData("var")}
 	if tas then
 		if tas.var.editor_select then
 		
@@ -171,8 +171,8 @@ function antiScHandler(cmd, precision)
 	if cmd =="precision" then
 		local precisionNumber = tonumber(precision)
 		if precisionNumber then
-			if not (rotation_precision > 0) then 
-				prompt("Rotation precision cannot be lower than 0!")
+			if not (precisionNumber >= 0 and precisionNumber <= 180) then 
+				prompt("Rotation precision can $$only ##be $$0 - 180##!")
 				return 
 			end
 			rotation_precision = precisionNumber
@@ -358,7 +358,7 @@ function onRender()
 			if getDistanceBetweenPoints3D(pX, pY, pZ, x, y, z) < 300 then
 				local sX, sY = getScreenFromWorldPosition(x, y, z + 1, 0.1)
 				if sX and sY then
-					local text = (antiScType == "rotation" and "ROT") or (antiScType == "anti-fw" and "BW") or "FW"
+					local text = (antiScType == "rotation" and "ROT: " .. tostring(rotation_precision) .. "*") or (antiScType == "anti-fw" and "BW") or "FW"
 					dxDrawText(text, sX+1, sY+1, sX+1, sY+1, 0xFF000000, 1.2, "arial", "center", "center")
 					dxDrawText(text, sX, sY, sX, sY, 0xFFFFAAAA, 1.2, "arial", "center", "center")
 				end
@@ -374,7 +374,7 @@ addEventHandler("onClientPreRender", root, onRender)
 function prompt(text, r, g, b)
 	if type(text) ~= "string" then return end
 	local r, g, b = r or 255, g or 100, b or 100
-	local prefix = (text ~= "" and "[TAS] ") or ""
+	local prefix = (text ~= "" and "[ASC] ") or ""
 	return outputChatBox(prefix.."#FFFFFF"..string.gsub(string.gsub(text, "%#%#", "#FFFFFF"), "%$%$", string.format("#%.2X%.2X%.2X", r, g, b)), r, g, b, true)
 end
 
