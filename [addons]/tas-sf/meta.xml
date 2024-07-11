@@ -1,0 +1,6 @@
+<meta>
+	<info author="chris1384" version="1.0" name="TAS - Slowbug Fix Generator" description="Tool to prove others that you can script." type="script" />
+	<min_mta_version client="1.5.5-9.14060" server="1.5.5-9.14060"></min_mta_version>
+	
+	<script src="client.lua" type="client" cache="false"/>
+</meta>
