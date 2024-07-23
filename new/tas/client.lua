@@ -337,12 +337,34 @@ function tas.init()
 		addCommandHandler(v, tas.commands)
 	end
 	
+	-- // Fix for different keyboard layouts and multiple bound controls
 	for bind, control in pairs(tas.key_mappings) do
+	
 		local bound_keys = getBoundKeys(control)
+		
 		if type(bound_keys) == "table" then
 			for bound, _ in pairs(bound_keys) do
+			
 				if not tas.registered_keys[bound] then tas.registered_keys[bound] = {} end
-				tas.registered_keys[bound].c_bind = bind
+				
+				-- // check if the bind was bounded already
+				if tas.registered_keys[bound].c_bind then
+				
+					-- check if the bind is a table already, to add more binds to it
+					if type(tas.registered_keys[bound].c_bind) == "table" then
+						tas.registered_keys[bound].c_bind[bind] = true
+						
+					else -- otherwise change it into a paired table
+						local primaryKey = tas.registered_keys[bound].c_bind
+						tas.registered_keys[bound].c_bind = {[primaryKey] = true}
+					end
+					
+				else
+				
+				-- // otherwise, add it as a single keybind and see what happens next
+					tas.registered_keys[bound].c_bind = bind
+				end
+				
 			end
 		end
 	end
@@ -1202,7 +1224,7 @@ function tas.commands(cmd, ...)
 		
 		local status = (tas.settings.trigger_mapStart == true) and "ENABLED" or "DISABLED"
 		
-		updateUserConfig()
+		tas.updateUserConfig()
 		
 		tas.prompt("Auto-TAS is now: $$".. tostring(status), 255, 100, 255)
 	
@@ -1260,7 +1282,7 @@ function tas.commands(cmd, ...)
 		
 		tas.settings.debugging.level = debug_number
 		
-		updateUserConfig()
+		tas.updateUserConfig()
 		
 		tas.prompt("Debugging level is now set to: $$".. tostring(debug_number), 255, 100, 255)
 		
@@ -1314,7 +1336,7 @@ function tas.commands(cmd, ...)
 					tas.settings[key] = value
 					tas.prompt("Changed $$"..key.." ##value to $$"..tostring(value).." ##(old: $$"..tostring(old).."##)", 255, 100, 255) 
 					
-					updateUserConfig()
+					tas.updateUserConfig()
 					
 				else
 					tas.prompt("Setting cvar failed, invalid key $$value##!", 255, 100, 100)
@@ -1699,8 +1721,18 @@ function tas.record_state(vehicle)
 		local keys = nil
 		for key, control in pairs(tas.registered_keys) do
 			if getKeyState(key) then
+			
 				if not keys then keys = {} end
-				table_insert(keys, control.c_bind)
+				
+				if type(control.c_bind) == "table" then
+					for t, y in pairs(control.c_bind) do
+						table_insert(keys, t)
+					end
+					
+				else
+					table_insert(keys, control.c_bind)
+				end
+				
 			end
 		end
 		
@@ -2502,7 +2534,7 @@ end
 addEvent("tas:onClientGlobalRequest", true)
 addEventHandler("tas:onClientGlobalRequest", root, tas.globalRequestData)
 
-function updateUserConfig()
+function tas.updateUserConfig()
 	if fileExists("@config.json") then fileDelete("@config.json") end
 	local save_cvar_file = fileCreate("@config.json")
 	if save_cvar_file then
