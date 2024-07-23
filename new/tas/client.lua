@@ -723,6 +723,8 @@ function tas.commands(cmd, ...)
 		
 		tas.timers.load_warp = 	setTimer(function()
 		
+			if not (vehicle and isElement(vehicle)) then return end
+		
 			if tas.var.recording and getTickCount() - load_startTick > fps_to_ms + tas.settings.warpDelay then
 				setTimer(executeCommandHandler, 50, 1, tas.registered_commands.load_warp) -- ez hax, can get softlocked
 			end
