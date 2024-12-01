@@ -22,6 +22,7 @@ local tas = {
 		globalAnnouncements = true, -- enable server announcements whenever a player is saving/loading a file
 		
 		saveWarpData = true, -- save warp data to TAS files
+		allowSaveOverride = true, -- if a TAS file exists already on the server, override it instead of returning an error
 		-- //
 	},
 }
@@ -81,7 +82,12 @@ function tas.commands(player, cmd, ...)
 		if not permissionCheck then tas.prompt("You don't have access to use this command!", player, 255, 100, 100) return end
 		
 		local fileTarget = "saves/"..args[1]..".tas"
-		if fileExists(fileTarget) then tas.prompt("Server saving failed, file with the same name $$already ##exists!", player, 255, 100, 100) return end
+		if fileExists(fileTarget) then 
+			if not tas.settings.allowSaveOverride then
+				tas.prompt("Server saving failed, file with the same name $$already ##exists!", player, 255, 100, 100) 
+				return 
+			end
+		end
 		
 		tas.prompt("Requesting client for data..", player, 100, 255, 100)
 		setTimer(triggerClientEvent, 500, 1, player, "tas:onClientGlobalRequest", player, "save", tostring(args[1]))
@@ -173,11 +179,17 @@ addEventHandler("tas:onGlobalRequest", root, function(handleType, ...)
 		if #tas_data > 0 then
 	
 			local fileTarget = "saves/"..tas_fileName..".tas"
-			
-			-- using fileExists shouldn't be used anymore as it's already handled in the command part
-			-- under weird circumstances, errors can still happen and wreck everything up. for safety, this check is also done here
-			if fileExists(fileTarget) then tas.prompt("Server saving error, file with the same name $$already ##exists!", player, 255, 100, 100) return end
-			
+
+			if fileExists(fileTarget) then 
+				if tas.settings.allowSaveOverride then
+					tas.prompt("Warning! Existing server file $$("..fileTarget..") ##has been overwritten!", root, 255, 150, 100)
+					fileDelete(fileTarget) -- no more annoyance
+				else
+					tas.prompt("Server saving failed, file with the same name $$already ##exists!", player, 255, 100, 100) -- might happen
+					return 
+				end
+			end
+				
 			local save_file = fileCreate(fileTarget)
 			if save_file then
 			
