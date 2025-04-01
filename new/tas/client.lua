@@ -679,7 +679,7 @@ function tas.commands(cmd, ...)
 		end
 		
 		if tas.var.recording then
-			if not (tas.settings.enableEditorMode and tas.var.editor == "test") then
+			if not (tas.settings.enableEditorMode == true and tas.var.editor == "test") then
 				if not w_data.tick or not w_data.frame then
 					tas.prompt("Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) 
 					return
@@ -744,7 +744,7 @@ function tas.commands(cmd, ...)
 			tas.nos(vehicle, w_data.n)
 			
 			if tas.var.recording then
-				if not (tas.settings.enableEditorMode and tas.var.editor == "test") then
+				if not (tas.settings.enableEditorMode == true and tas.var.editor == "test") then
 					tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms * tas.var.gamespeed
 					tas.var.record_tick = getTickCount() - w_data.tick
 				end
