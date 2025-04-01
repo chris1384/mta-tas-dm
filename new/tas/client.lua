@@ -744,7 +744,7 @@ function tas.commands(cmd, ...)
 			tas.nos(vehicle, w_data.n)
 			
 			if tas.var.recording then
-				if not tas.settings.enableEditorMode then
+				if not (tas.settings.enableEditorMode and tas.var.editor == "test") then
 					tas.data[#tas.data].tick = tas.data[#tas.data-1].tick + fps_to_ms * tas.var.gamespeed
 					tas.var.record_tick = getTickCount() - w_data.tick
 				end
