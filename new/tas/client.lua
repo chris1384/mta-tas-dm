@@ -679,7 +679,7 @@ function tas.commands(cmd, ...)
 		end
 		
 		if tas.var.recording then
-			if not tas.settings.enableEditorMode then
+			if not (tas.settings.enableEditorMode and tas.var.editor == "test") then
 				if not w_data.tick or not w_data.frame then
 					tas.prompt("Loading warp failed, warp has no $$frame ##or $$tick ##registered!", 255, 100, 100) 
 					return
